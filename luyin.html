@@ -3,17 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>社工访谈助手 (支持粤语)</title>
+  <title>社工访谈助手 (排版优化版)</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f5f7; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f5f7; color: #333;}
     .card { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
     input, textarea, select { width: 100%; padding: 12px; margin-top: 8px; box-sizing: border-box; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 15px;}
-    button { padding: 14px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 8px; border: none; cursor: pointer; width: 100%; transition: 0.2s;}
-    #startBtn { background-color: #07c160; color: white; }
-    #stopBtn { background-color: #fa5151; color: white; display: none; }
+    button.primary-btn { padding: 14px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 8px; border: none; cursor: pointer; width: 100%; transition: 0.2s; color: white;}
+    #startBtn { background-color: #07c160; }
+    #stopBtn { background-color: #fa5151; display: none; }
     button:disabled { background-color: #cccccc; cursor: not-allowed; }
     #status { text-align: center; margin: 15px 0; font-size: 14px; color: #888; }
-    #result { margin-top: 10px; white-space: pre-wrap; font-family: monospace; background: #282c34; color: #98c379; padding: 15px; border-radius: 8px; overflow-x: auto; line-height: 1.5;}
+    
+    /* 优化后的报告展示区域样式 */
+    #reportCard { display: none; padding-bottom: 10px; }
+    #result { margin-top: 10px; white-space: pre-wrap; font-size: 15px; line-height: 1.8; color: #222; }
+    
+    /* 底部工具栏样式 (字数与复制按钮) */
+    .report-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee; }
+    .word-count { color: #999; font-size: 14px; }
+    .copy-btn { padding: 8px 16px; font-size: 14px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; color: #555; cursor: pointer; transition: 0.2s;}
+    .copy-btn:hover { background-color: #e4e4e4; }
+
     .pulse { animation: pulse-animation 1.5s infinite; color: #fa5151; font-weight: bold;}
     @keyframes pulse-animation { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
   </style>
@@ -23,10 +33,10 @@
   <h2 style="text-align: center;">🎤 AI 社工访谈助手</h2>
 
   <div class="card">
-    <label for="apiKey" style="font-size: 14px; font-weight: bold; color: #333;">🔑 智谱 API Key (本地安全存储):</label>
+    <label for="apiKey" style="font-size: 14px; font-weight: bold;">🔑 智谱 API Key (本地安全存储):</label>
     <input type="password" id="apiKey" placeholder="输入你的 API Key">
     
-    <label for="langSelect" style="font-size: 14px; font-weight: bold; color: #333; display: block; margin-top: 15px;">🗣️ 选择受访者语言:</label>
+    <label for="langSelect" style="font-size: 14px; font-weight: bold; display: block; margin-top: 15px;">🗣️ 选择受访者语言:</label>
     <select id="langSelect">
       <option value="zh-CN">普通话</option>
       <option value="zh-HK">粤语 (广东话)</option>
@@ -34,18 +44,23 @@
   </div>
 
   <div class="card">
-    <button id="startBtn">▶️ 开始访谈 (录音并转文字)</button>
-    <button id="stopBtn">⏹️ 结束访谈 (交由 AI 整理)</button>
+    <button id="startBtn" class="primary-btn">▶️ 开始访谈 (录音并转文字)</button>
+    <button id="stopBtn" class="primary-btn">⏹️ 结束访谈 (交由 AI 整理)</button>
     
     <div id="status">准备就绪...</div>
     
-    <label style="font-size: 14px; font-weight: bold; color: #333;">📝 实时访谈记录 (可手动修改补充):</label>
+    <label style="font-size: 14px; font-weight: bold;">📝 实时访谈记录 (可手动修改补充):</label>
     <textarea id="transcript" rows="6" placeholder="当你开始说话时，文字会实时显示在这里..."></textarea>
   </div>
 
-  <div class="card" id="reportCard" style="display: none;">
-    <h3 style="margin-top: 0;">📑 AI 结构化报告</h3>
+  <div class="card" id="reportCard">
+    <h3 style="margin-top: 0; text-align: center; color: #07c160;">📑 社工访谈整理记录</h3>
     <div id="result"></div>
+    
+    <div class="report-footer">
+      <span class="word-count" id="wordCount">0 字</span>
+      <button class="copy-btn" id="copyBtn">复制全文</button>
+    </div>
   </div>
 
   <script>
@@ -68,21 +83,20 @@
     const reportCard = document.getElementById('reportCard');
     const resultDiv = document.getElementById('result');
     const langSelect = document.getElementById('langSelect');
+    const wordCountSpan = document.getElementById('wordCount');
+    const copyBtn = document.getElementById('copyBtn');
 
     if (!SpeechRecognition) {
-      statusDiv.innerHTML = "❌ 你的浏览器不支持原生语音识别，请使用最新版 Chrome 或 Edge 浏览器。";
+      statusDiv.innerHTML = "❌ 你的浏览器不支持原生语音识别，请使用最新版 Chrome、Edge 或 Safari 浏览器。";
       startBtn.disabled = true;
     } else {
       recognition = new SpeechRecognition();
       recognition.continuous = true; 
       recognition.interimResults = true; 
 
-      // 引擎静音自动停止时，如果我们还在访谈状态，就自动重启它
       recognition.onend = () => {
         if (isRecording) {
-          try {
-            recognition.start();
-          } catch(e) { /* 忽略重复启动错误 */ }
+          try { recognition.start(); } catch(e) { }
         }
       };
 
@@ -112,12 +126,11 @@
         return;
       }
 
-      // 【核心技能培训】：在每次启动录音前，读取下拉框的值，赋值给语音引擎
       recognition.lang = langSelect.value;
-      console.log("当前识别语言已设置为: " + recognition.lang);
-
       transcriptArea.value = ''; 
       reportCard.style.display = 'none';
+      resultDiv.innerText = '';
+      wordCountSpan.innerText = '0 字';
       
       try {
         recognition.start();
@@ -125,20 +138,20 @@
         startBtn.style.display = 'none';
         stopBtn.style.display = 'block';
         statusDiv.innerHTML = `<span class="pulse">🔴 正在聆听 (${langSelect.options[langSelect.selectedIndex].text})...</span>`;
-        langSelect.disabled = true; // 录音期间禁止切换语言
+        langSelect.disabled = true; 
       } catch (e) {
         console.error("启动录音失败", e);
       }
     };
 
-    // 4. 点击结束访谈，并触发大模型分析
+    // 4. 点击结束访谈
     stopBtn.onclick = async () => {
       isRecording = false;
       recognition.stop();
       
       startBtn.style.display = 'block';
       stopBtn.style.display = 'none';
-      langSelect.disabled = false; // 结束录音后允许切换语言
+      langSelect.disabled = false; 
       
       const textToProcess = transcriptArea.value.trim();
       if (!textToProcess) {
@@ -146,14 +159,40 @@
         return;
       }
 
-      statusDiv.innerText = "⏳ 访谈结束。大模型正在提取核心信息，请稍候...";
+      statusDiv.innerText = "⏳ 访谈结束。AI 正在生成专业排版报告，请稍候...";
       reportCard.style.display = 'block';
-      resultDiv.innerText = "分析中...";
+      resultDiv.innerText = "深入分析中...";
 
       await callLLM(textToProcess);
     };
 
-    // 5. 调用大模型的核心函数
+    // 5. 点击复制全文功能
+    copyBtn.onclick = () => {
+      const textToCopy = resultDiv.innerText;
+      if (!textToCopy) return;
+
+      // 使用现代浏览器的剪贴板 API
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        const originalText = copyBtn.innerText;
+        copyBtn.innerText = "✅ 复制成功";
+        copyBtn.style.backgroundColor = "#e6f7eb";
+        copyBtn.style.color = "#07c160";
+        copyBtn.style.borderColor = "#07c160";
+        
+        // 2秒后恢复原样
+        setTimeout(() => {
+          copyBtn.innerText = originalText;
+          copyBtn.style.backgroundColor = "#f0f0f0";
+          copyBtn.style.color = "#555";
+          copyBtn.style.borderColor = "#ddd";
+        }, 2000);
+      }).catch(err => {
+        alert("复制失败，请手动长按文字选择复制。");
+        console.error("复制报错: ", err);
+      });
+    };
+
+    // 6. 调用大模型的核心函数 (提示词全面升级)
     async function callLLM(text) {
       const apiKey = apiKeyInput.value.trim();
       try {
@@ -168,11 +207,25 @@
             messages: [
               {
                 role: "system",
-                content: `你是一个专业的社工助手。请将用户提供的原始口语化访谈记录，提炼并分类为四个JSON字段："家庭情况", "身体状况", "经济状况", "其他情况"。
-要求：
-1. 提取客观事实，去除语气词和重复的话语。
-2. 如果某项未提及请填"无记录"。
-3. 必须严格输出JSON格式，不要任何 Markdown 标记或多余解释。`
+                content: `你是一个专业的社工助手。请将用户提供的原始口语化访谈记录，提炼并整理成正式的社工文书报告。
+请严格按照以下排版格式输出（不要输出JSON，直接输出排版好的纯文本）：
+
+【家庭情况】
+（在这里用一段客观、连贯的文字总结家庭相关信息。）
+
+【身体状况】
+（在这里用一段客观、连贯的文字总结身体状况相关信息。）
+
+【经济状况】
+（在这里用一段客观、连贯的文字总结经济状况相关信息。）
+
+【其他情况】
+（在这里提取其他重要信息。）
+
+严格要求：
+1. 不要使用任何 Markdown 语法标记（比如不要用 ** 加粗）。
+2. 只输出上述四个模块，绝对不要输出多余的开头问候或结尾总结。
+3. 提取客观事实，去除语气词，语言要专业严谨。`如果没有提及的内容则留空。
               },
               { role: "user", content: text }
             ],
@@ -182,10 +235,14 @@
 
         const data = await response.json();
         if (response.ok) {
-           let aiReply = data.choices[0].message.content;
-           aiReply = aiReply.replace(/```json/g, '').replace(/```/g, '').trim();
+           let aiReply = data.choices[0].message.content.trim();
+           // 清理大模型偶尔带上的首尾多余空格或换行
            resultDiv.innerText = aiReply;
-           statusDiv.innerText = "✅ 报告生成完毕！你可以复制下方结果。";
+           statusDiv.innerText = "✅ 报告生成完毕！你可以点击右下角一键复制。";
+           
+           // 计算中文字数 (去除空格和换行符后的纯字符数)
+           const textLength = aiReply.replace(/\s+/g, '').length;
+           wordCountSpan.innerText = textLength + " 字";
         } else {
            resultDiv.innerText = "错误详情:\n" + JSON.stringify(data.error, null, 2);
            statusDiv.innerText = "❌ 分析失败。";
