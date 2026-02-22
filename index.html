@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>社工访谈助手 (修复版)</title>
+  <title>社工访谈助手 (Groq 高级版)</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f5f7; color: #333;}
     .card { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -12,45 +12,44 @@
     #startBtn { background-color: #07c160; }
     #stopBtn { background-color: #fa5151; display: none; }
     button:disabled { background-color: #cccccc; cursor: not-allowed; }
-    #status { text-align: center; margin: 15px 0; font-size: 14px; color: #888; }
+    #status { text-align: center; margin: 15px 0; font-size: 14px; color: #888; font-weight: bold;}
+    #timer { font-size: 18px; color: #fa5151; font-weight: bold; margin-left: 5px;}
     
-    /* 报告展示区域样式 */
     #reportCard { display: none; padding-bottom: 10px; }
     #result { margin-top: 10px; white-space: pre-wrap; font-size: 15px; line-height: 1.8; color: #222; }
     
-    /* 底部工具栏样式 */
     .report-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee; }
     .word-count { color: #999; font-size: 14px; }
     .copy-btn { padding: 8px 16px; font-size: 14px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 6px; color: #555; cursor: pointer; transition: 0.2s;}
     .copy-btn:hover { background-color: #e4e4e4; }
-
-    .pulse { animation: pulse-animation 1.5s infinite; color: #fa5151; font-weight: bold;}
-    @keyframes pulse-animation { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
   </style>
 </head>
 <body>
 
-  <h2 style="text-align: center;">🎤 AI 社工访谈助手</h2>
+  <h2 style="text-align: center;">🎤 AI 社工访谈助手 (Pro版)</h2>
 
   <div class="card">
-    <label for="apiKey" style="font-size: 14px; font-weight: bold;">🔑 智谱 API Key (本地安全存储):</label>
-    <input type="password" id="apiKey" placeholder="输入你的 API Key">
+    <label style="font-size: 14px; font-weight: bold;">🔑 智谱 API Key (用于排版整理):</label>
+    <input type="password" id="zhipuApiKey" placeholder="输入智谱 API Key">
     
-    <label for="langSelect" style="font-size: 14px; font-weight: bold; display: block; margin-top: 15px;">🗣️ 选择受访者语言:</label>
+    <label style="font-size: 14px; font-weight: bold; display: block; margin-top: 15px;">🔑 Groq API Key (用于超强语音转字):</label>
+    <input type="password" id="groqApiKey" placeholder="输入 Groq API Key (gsk_开头)">
+    
+    <label style="font-size: 14px; font-weight: bold; display: block; margin-top: 15px;">🗣️ 引导模型识别语言 (方言也选中文):</label>
     <select id="langSelect">
-      <option value="zh-CN">普通话</option>
-      <option value="zh-HK">粤语 (广东话)</option>
+      <option value="zh">中文 (包含普通话及各地方言)</option>
+      <option value="en">英文</option>
     </select>
   </div>
 
   <div class="card">
-    <button id="startBtn" class="primary-btn">▶️ 开始访谈 (录音并转文字)</button>
-    <button id="stopBtn" class="primary-btn">⏹️ 结束访谈 (交由 AI 整理)</button>
+    <button id="startBtn" class="primary-btn">▶️ 开始录音访谈</button>
+    <button id="stopBtn" class="primary-btn">⏹️ 结束录音并开始 AI 处理</button>
     
     <div id="status">准备就绪...</div>
     
-    <label style="font-size: 14px; font-weight: bold;">📝 实时访谈记录 (可手动修改补充):</label>
-    <textarea id="transcript" rows="6" placeholder="当你开始说话时，文字会实时显示在这里..."></textarea>
+    <label style="font-size: 14px; font-weight: bold;">📝 精准语音转写结果 (支持方言):</label>
+    <textarea id="transcript" rows="6" placeholder="录音结束后，Whisper 大模型识别的文字会出现在这里..."></textarea>
   </div>
 
   <div class="card" id="reportCard">
@@ -64,17 +63,21 @@
   </div>
 
   <script>
-    // 1. 初始化 API Key
-    const apiKeyInput = document.getElementById('apiKey');
-    apiKeyInput.value = localStorage.getItem('zhipu_api_key') || '';
-    apiKeyInput.addEventListener('input', function() {
-      localStorage.setItem('zhipu_api_key', this.value);
-    });
+    // 1. 初始化并保存两个 API Key
+    const zhipuApiKeyInput = document.getElementById('zhipuApiKey');
+    const groqApiKeyInput = document.getElementById('groqApiKey');
+    
+    zhipuApiKeyInput.value = localStorage.getItem('zhipu_api_key') || '';
+    groqApiKeyInput.value = localStorage.getItem('groq_api_key') || '';
+    
+    zhipuApiKeyInput.addEventListener('input', function() { localStorage.setItem('zhipu_api_key', this.value); });
+    groqApiKeyInput.addEventListener('input', function() { localStorage.setItem('groq_api_key', this.value); });
 
-    // 2. 初始化浏览器语音识别 API
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    let recognition;
-    let isRecording = false;
+    // 2. 录音引擎相关变量
+    let mediaRecorder;
+    let audioChunks = [];
+    let recordingTimer;
+    let secondsRecorded = 0;
 
     const startBtn = document.getElementById('startBtn');
     const stopBtn = document.getElementById('stopBtn');
@@ -86,118 +89,177 @@
     const wordCountSpan = document.getElementById('wordCount');
     const copyBtn = document.getElementById('copyBtn');
 
-    if (!SpeechRecognition) {
-      statusDiv.innerHTML = "❌ 你的浏览器不支持原生语音识别，请使用最新版 Chrome、Edge 或 Safari 浏览器。";
-      startBtn.disabled = true;
-    } else {
-      recognition = new SpeechRecognition();
-      recognition.continuous = true; 
-      recognition.interimResults = true; 
-
-      recognition.onend = () => {
-        if (isRecording) {
-          try { recognition.start(); } catch(e) { }
-        }
-      };
-
-      // 【核心修复区】：专门捕捉浏览器的底层网络和麦克风错误，并弹窗报警！
-      recognition.onerror = (event) => {
-        console.error("语音识别底层报错:", event.error);
-        isRecording = false;
-        
-        // 恢复按钮状态
-        startBtn.style.display = 'block';
-        stopBtn.style.display = 'none';
-        langSelect.disabled = false;
-        
-        let errorMsg = event.error;
-        if (event.error === 'not-allowed') {
-           errorMsg = "麦克风权限被拒绝，请检查浏览器设置。";
-        } else if (event.error === 'network') {
-           errorMsg = "网络连接失败！(如果你在使用 Chrome，大概率是被墙拦截了，请换用 Edge 浏览器重试)";
-        } else if (event.error === 'no-speech') {
-           errorMsg = "长时间未检测到声音，识别已自动暂停。";
-        }
-
-        statusDiv.innerHTML = `<span style="color:red;">❌ 发生错误: ${errorMsg}</span>`;
-        // 强制弹窗，让你绝对能看到报错
-        alert("语音识别模块出错：\n" + errorMsg);
-      };
-
-      recognition.onresult = (event) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-        
-        if (finalTranscript) {
-           transcriptArea.value += finalTranscript + "。";
-        }
-        statusDiv.innerHTML = `<span class="pulse">🔴 正在聆听...</span> ` + interimTranscript;
-      };
+    // 格式化时间显示 (例如 01:05)
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = (seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
     }
 
-    // 3. 点击开始访谈
-    startBtn.onclick = () => {
-      if (!apiKeyInput.value.trim()) {
-        alert("请先填写顶部的 API Key！");
+    // 3. 点击开始录音
+    startBtn.onclick = async () => {
+      if (!zhipuApiKeyInput.value.trim() || !groqApiKeyInput.value.trim()) {
+        alert("请先填写顶部的两个 API Key！");
         return;
       }
 
-      // 先改变界面，再启动录音（防止静默卡死）
-      startBtn.style.display = 'none';
-      stopBtn.style.display = 'block';
-      statusDiv.innerHTML = `<span class="pulse">🔴 正在请求启动麦克风...</span>`;
-      langSelect.disabled = true;
-      transcriptArea.value = ''; 
-      reportCard.style.display = 'none';
-      resultDiv.innerText = '';
-      wordCountSpan.innerText = '0 字';
-      
       try {
-        recognition.lang = langSelect.value;
-        recognition.start();
-        isRecording = true;
-        statusDiv.innerHTML = `<span class="pulse">🔴 正在聆听 (${langSelect.options[langSelect.selectedIndex].text})...</span>`;
-      } catch (e) {
-        console.error("尝试启动录音失败:", e);
-        startBtn.style.display = 'block';
-        stopBtn.style.display = 'none';
-        langSelect.disabled = false;
-        statusDiv.innerHTML = "❌ 启动失败，请检查麦克风。";
-        alert("尝试启动麦克风失败：" + e.message);
+        // 请求麦克风权限
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        // 初始化录音机
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = []; // 清空之前的音频碎片
+
+        // 收集音频数据
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) audioChunks.push(event.data);
+        };
+
+        // 录音结束时的核心逻辑！
+        mediaRecorder.onstop = async () => {
+          // 释放麦克风
+          stream.getTracks().forEach(track => track.stop());
+          
+          // 将收集到的碎片打包成一个完整的 WebM 音频文件
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          
+          if (audioChunks.length === 0) {
+              statusDiv.innerHTML = "❌ 录音失败，没有捕捉到声音。";
+              return;
+          }
+
+          // 开启全自动双模型处理流水线
+          await processAudioAndText(audioBlob);
+        };
+
+        // 正式开始录制
+        mediaRecorder.start(1000); // 每秒吐出一个数据块
+        
+        // 界面更新与计时器
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+        transcriptArea.value = '';
+        reportCard.style.display = 'none';
+        
+        secondsRecorded = 0;
+        statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">00:00</span>`;
+        recordingTimer = setInterval(() => {
+          secondsRecorded++;
+          document.getElementById('timer').innerText = formatTime(secondsRecorded);
+        }, 1000);
+
+      } catch (err) {
+        console.error("麦克风启动失败:", err);
+        alert("麦克风启动失败，请确保您已授予浏览器麦克风权限！\n错误详情: " + err.message);
       }
     };
 
-    // 4. 点击结束访谈
-    stopBtn.onclick = async () => {
-      isRecording = false;
-      recognition.stop();
-      
+    // 4. 点击结束录音
+    stopBtn.onclick = () => {
+      clearInterval(recordingTimer);
       startBtn.style.display = 'block';
       stopBtn.style.display = 'none';
-      langSelect.disabled = false; 
+      statusDiv.innerHTML = "⏳ 录音已结束，正在打包音频...";
       
-      const textToProcess = transcriptArea.value.trim();
-      if (!textToProcess) {
-        statusDiv.innerText = "⚠️ 没有录入任何内容，分析取消。";
-        return;
-      }
-
-      statusDiv.innerText = "⏳ 访谈结束。AI 正在生成专业排版报告，请稍候...";
-      reportCard.style.display = 'block';
-      resultDiv.innerText = "深入分析中...";
-
-      await callLLM(textToProcess);
+      // 这会触发 mediaRecorder.onstop 事件
+      mediaRecorder.stop(); 
     };
 
-    // 5. 复制全文功能
+    // 5. 核心大模型流水线：先调 Groq (语音转文字) -> 再调 智谱 (文字排版)
+    async function processAudioAndText(audioBlob) {
+      const groqKey = groqApiKeyInput.value.trim();
+      const zhipuKey = zhipuApiKeyInput.value.trim();
+      
+      try {
+        // ========== 阶段一：调用 Groq Whisper 大模型进行语音识别 ==========
+        statusDiv.innerHTML = "⏳ [1/2] 正在发送至 Groq Whisper 大模型识别语音...";
+        
+        const formData = new FormData();
+        // 给 Blob 随便起个名字，Groq 会自动识别格式
+        formData.append('file', audioBlob, 'recording.webm'); 
+        formData.append('model', 'whisper-large-v3');
+        formData.append('language', langSelect.value); // 强制输出中文
+        // formData.append('prompt', '这是一段社工访谈记录，包含普通话和方言。'); // 可选：添加提示词帮助模型理解上下文
+
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${groqKey}` },
+          body: formData
+        });
+
+        const groqData = await groqResponse.json();
+        
+        if (!groqResponse.ok) {
+            throw new Error(`Groq 语音识别失败: ${groqData.error?.message || '未知错误'}`);
+        }
+
+        const transcriptText = groqData.text.trim();
+        transcriptArea.value = transcriptText;
+
+        if (!transcriptText) {
+             statusDiv.innerHTML = "⚠️ 录音太短或全是静音，模型未识别出文字。";
+             return;
+        }
+
+        // ========== 阶段二：调用 智谱 AI 大模型进行整理排版 ==========
+        statusDiv.innerHTML = "⏳ [2/2] 语音识别完成！正在交给智谱 AI 整理排版...";
+        reportCard.style.display = 'block';
+        resultDiv.innerText = "深入分析中...";
+
+        const zhipuResponse = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${zhipuKey}`
+          },
+          body: JSON.stringify({
+            model: "glm-4-flash-250414",
+            messages: [
+              {
+                role: "system",
+                content: `你是一位专业的社会工作案例记录员。请根据提供的访谈语音转录文本，将内容整理归类为以下四个维度：
+
+【家庭情况】
+（家庭成员构成、居住情况、家庭关系、婚姻状况、子女情况、家庭支持等）
+
+【身体状况】
+（健康状况、疾病史、残疾情况、就医情况、日常生活能力等）
+
+【经济状况】
+（收入来源、就业情况、低保/补贴、债务情况、消费支出等）
+
+【其他情况】
+（社会支持网络、心理状态、特殊需求、服务意愿、服务需求、其他重要信息等）
+
+要求：语言简洁客观，使用社工专业术语；不添加主观判断。`
+              },
+              { role: "user", content: transcriptText }
+            ],
+            temperature: 0.1
+          })
+        });
+
+        const zhipuData = await zhipuResponse.json();
+        
+        if (zhipuResponse.ok) {
+           let aiReply = zhipuData.choices[0].message.content.trim();
+           resultDiv.innerText = aiReply;
+           statusDiv.innerHTML = "✅ <span style='color: #07c160;'>全流程处理完毕！你可以点击下方按钮复制。</span>";
+           
+           const textLength = aiReply.replace(/\s+/g, '').length;
+           wordCountSpan.innerText = textLength + " 字";
+        } else {
+           throw new Error(`智谱 AI 分析失败: ${JSON.stringify(zhipuData.error)}`);
+        }
+
+      } catch (error) {
+        console.error("流水线处理出错:", error);
+        statusDiv.innerHTML = `<span style="color:red;">❌ 处理失败: ${error.message}</span>`;
+      }
+    }
+
+    // 6. 复制全文功能
     copyBtn.onclick = () => {
       const textToCopy = resultDiv.innerText;
       if (!textToCopy) return;
@@ -219,64 +281,7 @@
         alert("复制失败，请手动长按文字选择复制。");
       });
     };
-
-    // 6. 调用大模型分析代码
-    async function callLLM(text) {
-      const apiKey = apiKeyInput.value.trim();
-      try {
-        const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: "glm-4-flash-250414",
-            messages: [
-              {
-                role: "system",
-                content: `你是一位专业的社会工作案例记录员。请根据提供的访谈语音转录文本，将内容整理归类为以下四个维度：
-
-【家庭情况】
-（家庭成员构成、居住情况、家庭关系、婚姻状况、子女情况、家庭支持等）
-
-【身体状况】
-（健康状况、疾病史、残疾情况、就医情况、日常生活能力等）
-
-【经济状况】
-（收入来源、就业情况、低保/补贴、债务情况、消费支出等）
-
-【其他情况】
-（社会支持网络、心理状态、特殊需求、服务意愿、其他重要信息等）
-
-要求：语言简洁客观，使用社工专业术语；不添加主观判断。`
-              },
-              { role: "user", content: text }
-            ],
-            temperature: 0.1
-          })
-        });
-
-        const data = await response.json();
-        if (response.ok) {
-           let aiReply = data.choices[0].message.content.trim();
-           resultDiv.innerText = aiReply;
-           statusDiv.innerText = "✅ 报告生成完毕！你可以点击右下角一键复制。";
-           
-           const textLength = aiReply.replace(/\s+/g, '').length;
-           wordCountSpan.innerText = textLength + " 字";
-        } else {
-           resultDiv.innerText = "错误详情:\n" + JSON.stringify(data.error, null, 2);
-           statusDiv.innerText = "❌ 分析失败。";
-        }
-      } catch (error) {
-        resultDiv.innerText = "网络异常：" + error.message;
-        statusDiv.innerText = "❌ 请求大模型超时或失败。";
-      }
-    }
   </script>
 
 </body>
-
 </html>
-
