@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社工访谈助手 (支持粤语)</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f5f7; }
+    .card { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    input, textarea, select { width: 100%; padding: 12px; margin-top: 8px; box-sizing: border-box; border: 1px solid #e0e0e0; border-radius: 8px; font-size: 15px;}
+    button { padding: 14px 20px; font-size: 16px; font-weight: bold; margin-top: 15px; border-radius: 8px; border: none; cursor: pointer; width: 100%; transition: 0.2s;}
+    #startBtn { background-color: #07c160; color: white; }
+    #stopBtn { background-color: #fa5151; color: white; display: none; }
+    button:disabled { background-color: #cccccc; cursor: not-allowed; }
+    #status { text-align: center; margin: 15px 0; font-size: 14px; color: #888; }
+    #result { margin-top: 10px; white-space: pre-wrap; font-family: monospace; background: #282c34; color: #98c379; padding: 15px; border-radius: 8px; overflow-x: auto; line-height: 1.5;}
+    .pulse { animation: pulse-animation 1.5s infinite; color: #fa5151; font-weight: bold;}
+    @keyframes pulse-animation { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+  </style>
+</head>
+<body>
+
+  <h2 style="text-align: center;">🎤 AI 社工访谈助手</h2>
+
+  <div class="card">
+    <label for="apiKey" style="font-size: 14px; font-weight: bold; color: #333;">🔑 智谱 API Key (本地安全存储):</label>
+    <input type="password" id="apiKey" placeholder="输入你的 API Key">
+    
+    <label for="langSelect" style="font-size: 14px; font-weight: bold; color: #333; display: block; margin-top: 15px;">🗣️ 选择受访者语言:</label>
+    <select id="langSelect">
+      <option value="zh-CN">普通话</option>
+      <option value="zh-HK">粤语 (广东话)</option>
+    </select>
+  </div>
+
+  <div class="card">
+    <button id="startBtn">▶️ 开始访谈 (录音并转文字)</button>
+    <button id="stopBtn">⏹️ 结束访谈 (交由 AI 整理)</button>
+    
+    <div id="status">准备就绪...</div>
+    
+    <label style="font-size: 14px; font-weight: bold; color: #333;">📝 实时访谈记录 (可手动修改补充):</label>
+    <textarea id="transcript" rows="6" placeholder="当你开始说话时，文字会实时显示在这里..."></textarea>
+  </div>
+
+  <div class="card" id="reportCard" style="display: none;">
+    <h3 style="margin-top: 0;">📑 AI 结构化报告</h3>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    // 1. 初始化 API Key
+    const apiKeyInput = document.getElementById('apiKey');
+    apiKeyInput.value = localStorage.getItem('zhipu_api_key') || '';
+    apiKeyInput.addEventListener('input', function() {
+      localStorage.setItem('zhipu_api_key', this.value);
+    });
+
+    // 2. 初始化浏览器语音识别 API
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition;
+    let isRecording = false;
+
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusDiv = document.getElementById('status');
+    const transcriptArea = document.getElementById('transcript');
+    const reportCard = document.getElementById('reportCard');
+    const resultDiv = document.getElementById('result');
+    const langSelect = document.getElementById('langSelect');
+
+    if (!SpeechRecognition) {
+      statusDiv.innerHTML = "❌ 你的浏览器不支持原生语音识别，请使用最新版 Chrome 或 Edge 浏览器。";
+      startBtn.disabled = true;
+    } else {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true; 
+      recognition.interimResults = true; 
+
+      // 引擎静音自动停止时，如果我们还在访谈状态，就自动重启它
+      recognition.onend = () => {
+        if (isRecording) {
+          try {
+            recognition.start();
+          } catch(e) { /* 忽略重复启动错误 */ }
+        }
+      };
+
+      recognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+        
+        if (finalTranscript) {
+           transcriptArea.value += finalTranscript + "。";
+        }
+        statusDiv.innerHTML = `<span class="pulse">🔴 正在聆听...</span> ` + interimTranscript;
+      };
+    }
+
+    // 3. 点击开始访谈
+    startBtn.onclick = () => {
+      if (!apiKeyInput.value.trim()) {
+        alert("请先填写顶部的 API Key！");
+        return;
+      }
+
+      // 【核心技能培训】：在每次启动录音前，读取下拉框的值，赋值给语音引擎
+      recognition.lang = langSelect.value;
+      console.log("当前识别语言已设置为: " + recognition.lang);
+
+      transcriptArea.value = ''; 
+      reportCard.style.display = 'none';
+      
+      try {
+        recognition.start();
+        isRecording = true;
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+        statusDiv.innerHTML = `<span class="pulse">🔴 正在聆听 (${langSelect.options[langSelect.selectedIndex].text})...</span>`;
+        langSelect.disabled = true; // 录音期间禁止切换语言
+      } catch (e) {
+        console.error("启动录音失败", e);
+      }
+    };
+
+    // 4. 点击结束访谈，并触发大模型分析
+    stopBtn.onclick = async () => {
+      isRecording = false;
+      recognition.stop();
+      
+      startBtn.style.display = 'block';
+      stopBtn.style.display = 'none';
+      langSelect.disabled = false; // 结束录音后允许切换语言
+      
+      const textToProcess = transcriptArea.value.trim();
+      if (!textToProcess) {
+        statusDiv.innerText = "⚠️ 没有录入任何内容，分析取消。";
+        return;
+      }
+
+      statusDiv.innerText = "⏳ 访谈结束。大模型正在提取核心信息，请稍候...";
+      reportCard.style.display = 'block';
+      resultDiv.innerText = "分析中...";
+
+      await callLLM(textToProcess);
+    };
+
+    // 5. 调用大模型的核心函数
+    async function callLLM(text) {
+      const apiKey = apiKeyInput.value.trim();
+      try {
+        const response = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: "glm-4-flash",
+            messages: [
+              {
+                role: "system",
+                content: `你是一个专业的社工助手。请将用户提供的原始口语化访谈记录，提炼并分类为四个JSON字段："家庭情况", "身体状况", "经济状况", "其他情况"。
+要求：
+1. 提取客观事实，去除语气词和重复的话语。
+2. 如果某项未提及请填"无记录"。
+3. 必须严格输出JSON格式，不要任何 Markdown 标记或多余解释。`
+              },
+              { role: "user", content: text }
+            ],
+            temperature: 0.1
+          })
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+           let aiReply = data.choices[0].message.content;
+           aiReply = aiReply.replace(/```json/g, '').replace(/```/g, '').trim();
+           resultDiv.innerText = aiReply;
+           statusDiv.innerText = "✅ 报告生成完毕！你可以复制下方结果。";
+        } else {
+           resultDiv.innerText = "错误详情:\n" + JSON.stringify(data.error, null, 2);
+           statusDiv.innerText = "❌ 分析失败。";
+        }
+      } catch (error) {
+        resultDiv.innerText = "网络异常：" + error.message;
+        statusDiv.innerText = "❌ 请求大模型超时或失败。";
+      }
+    }
+  </script>
+
+</body>
+</html>
