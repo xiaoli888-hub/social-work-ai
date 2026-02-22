@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>社工访谈助手 (Groq 高级版)</title>
+  <title>社工访谈助手 (DeepSeek 高级版)</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; background-color: #f4f5f7; color: #333;}
     .card { background: #fff; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -26,11 +26,11 @@
 </head>
 <body>
 
-  <h2 style="text-align: center;">🎤 AI 社工访谈助手 (Pro版)</h2>
+  <h2 style="text-align: center;">🎤 AI 社工访谈助手 (DeepSeek版)</h2>
 
   <div class="card">
-    <label style="font-size: 14px; font-weight: bold;">🔑 智谱 API Key (用于排版整理):</label>
-    <input type="password" id="zhipuApiKey" placeholder="输入智谱 API Key">
+    <label style="font-size: 14px; font-weight: bold;">🔑 DeepSeek API Key (用于排版整理):</label>
+    <input type="password" id="deepseekApiKey" placeholder="输入 DeepSeek API Key (sk-开头)">
     
     <label style="font-size: 14px; font-weight: bold; display: block; margin-top: 15px;">🔑 Groq API Key (用于超强语音转字):</label>
     <input type="password" id="groqApiKey" placeholder="输入 Groq API Key (gsk_开头)">
@@ -64,13 +64,15 @@
 
   <script>
     // 1. 初始化并保存两个 API Key
-    const zhipuApiKeyInput = document.getElementById('zhipuApiKey');
+    const deepseekApiKeyInput = document.getElementById('deepseekApiKey');
     const groqApiKeyInput = document.getElementById('groqApiKey');
     
-    zhipuApiKeyInput.value = localStorage.getItem('zhipu_api_key') || '';
+    // 从本地存储读取
+    deepseekApiKeyInput.value = localStorage.getItem('deepseek_api_key') || '';
     groqApiKeyInput.value = localStorage.getItem('groq_api_key') || '';
     
-    zhipuApiKeyInput.addEventListener('input', function() { localStorage.setItem('zhipu_api_key', this.value); });
+    // 监听输入并保存到本地
+    deepseekApiKeyInput.addEventListener('input', function() { localStorage.setItem('deepseek_api_key', this.value); });
     groqApiKeyInput.addEventListener('input', function() { localStorage.setItem('groq_api_key', this.value); });
 
     // 2. 录音引擎相关变量
@@ -98,30 +100,22 @@
 
     // 3. 点击开始录音
     startBtn.onclick = async () => {
-      if (!zhipuApiKeyInput.value.trim() || !groqApiKeyInput.value.trim()) {
+      if (!deepseekApiKeyInput.value.trim() || !groqApiKeyInput.value.trim()) {
         alert("请先填写顶部的两个 API Key！");
         return;
       }
 
       try {
-        // 请求麦克风权限
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        // 初始化录音机
         mediaRecorder = new MediaRecorder(stream);
-        audioChunks = []; // 清空之前的音频碎片
+        audioChunks = [];
 
-        // 收集音频数据
         mediaRecorder.ondataavailable = (event) => {
           if (event.data.size > 0) audioChunks.push(event.data);
         };
 
-        // 录音结束时的核心逻辑！
         mediaRecorder.onstop = async () => {
-          // 释放麦克风
           stream.getTracks().forEach(track => track.stop());
-          
-          // 将收集到的碎片打包成一个完整的 WebM 音频文件
           const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
           
           if (audioChunks.length === 0) {
@@ -133,10 +127,8 @@
           await processAudioAndText(audioBlob);
         };
 
-        // 正式开始录制
-        mediaRecorder.start(1000); // 每秒吐出一个数据块
+        mediaRecorder.start(1000); 
         
-        // 界面更新与计时器
         startBtn.style.display = 'none';
         stopBtn.style.display = 'block';
         transcriptArea.value = '';
@@ -161,26 +153,22 @@
       startBtn.style.display = 'block';
       stopBtn.style.display = 'none';
       statusDiv.innerHTML = "⏳ 录音已结束，正在打包音频...";
-      
-      // 这会触发 mediaRecorder.onstop 事件
       mediaRecorder.stop(); 
     };
 
-    // 5. 核心大模型流水线：先调 Groq (语音转文字) -> 再调 智谱 (文字排版)
+    // 5. 核心大模型流水线：Groq (语音转文字) -> DeepSeek (文字排版)
     async function processAudioAndText(audioBlob) {
       const groqKey = groqApiKeyInput.value.trim();
-      const zhipuKey = zhipuApiKeyInput.value.trim();
+      const deepseekKey = deepseekApiKeyInput.value.trim();
       
       try {
         // ========== 阶段一：调用 Groq Whisper 大模型进行语音识别 ==========
         statusDiv.innerHTML = "⏳ [1/2] 正在发送至 Groq Whisper 大模型识别语音...";
         
         const formData = new FormData();
-        // 给 Blob 随便起个名字，Groq 会自动识别格式
         formData.append('file', audioBlob, 'recording.webm'); 
         formData.append('model', 'whisper-large-v3');
-        formData.append('language', langSelect.value); // 强制输出中文
-        // formData.append('prompt', '这是一段社工访谈记录，包含普通话和方言。'); // 可选：添加提示词帮助模型理解上下文
+        formData.append('language', langSelect.value); 
 
         const groqResponse = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
           method: 'POST',
@@ -202,55 +190,60 @@
              return;
         }
 
-        // ========== 阶段二：调用 智谱 AI 大模型进行整理排版 ==========
-        statusDiv.innerHTML = "⏳ [2/2] 语音识别完成！正在交给智谱 AI 整理排版...";
+        // ========== 阶段二：调用 DeepSeek 大模型进行整理排版 ==========
+        statusDiv.innerHTML = "⏳ [2/2] 语音识别完成！正在交给 DeepSeek 整理排版...";
         reportCard.style.display = 'block';
-        resultDiv.innerText = "深入分析中...";
+        resultDiv.innerText = "深入分析与排版中...";
 
-        const zhipuResponse = await fetch('https://open.bigmodel.cn/api/paas/v4/chat/completions', {
+        // 注意这里：地址换成了 DeepSeek 的官方接口
+        const deepseekResponse = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${zhipuKey}`
+            'Authorization': `Bearer ${deepseekKey}`
           },
           body: JSON.stringify({
-            model: "glm-4-flash-250414",
+            model: "deepseek-chat", // 使用 DeepSeek 的对话模型
             messages: [
               {
                 role: "system",
-                content: `你是一位专业的社会工作案例记录员。请根据提供的访谈语音转录文本，将内容整理归类为以下四个维度：
+                content: `你是一个专业的社工助手。请将用户提供的原始口语化访谈记录，提炼并整理成正式的社工文书报告。
+请严格按照以下排版格式输出：
 
 【家庭情况】
-（家庭成员构成、家庭关系、婚姻状况、子女情况、家庭支持等）
+（家庭成员构成、家庭关系、婚姻状况、子女情况、家庭支持等）如果没有则留空
 
 【身体状况】
-（健康状况、疾病史、残疾情况、就医情况、日常生活能力等）
+（健康状况、疾病史、残疾情况、就医情况、日常生活能力等），如果没有则留空
 
 【经济状况】
-（收入来源、就业情况、低保/补贴、债务情况、消费支出等）
+收入来源、就业情况、低保/补贴、债务情况、消费支出等）如果没有则留空
 
 【其他情况】
-（居住情况、社会支持网络、心理状态、特殊需求、服务意愿、服务需求、其他重要信息等，如果没有服务需求或意愿，请注明暂时没有服务需求）
+（居住情况、社会支持网络、心理状态、特殊需求、服务意愿、其他重要信息等），当没有服务需求或服务意愿时，请注明暂时没有需求
 
-要求：语言简洁客观，使用社工专业术语；不添加主观判断。`
+严格要求：
+1. 不要使用任何 Markdown 语法标记（比如不要用 ** 加粗）。
+2. 只输出上述四个模块，绝对不要输出多余的开头问候或结尾总结。
+3. 提取客观事实，去除语气词，语言要专业严谨。`
               },
               { role: "user", content: transcriptText }
             ],
-            temperature: 0.1
+            temperature: 0.1 // 较低的温度保证排版的稳定性
           })
         });
 
-        const zhipuData = await zhipuResponse.json();
+        const deepseekData = await deepseekResponse.json();
         
-        if (zhipuResponse.ok) {
-           let aiReply = zhipuData.choices[0].message.content.trim();
+        if (deepseekResponse.ok) {
+           let aiReply = deepseekData.choices[0].message.content.trim();
            resultDiv.innerText = aiReply;
            statusDiv.innerHTML = "✅ <span style='color: #07c160;'>全流程处理完毕！你可以点击下方按钮复制。</span>";
            
            const textLength = aiReply.replace(/\s+/g, '').length;
            wordCountSpan.innerText = textLength + " 字";
         } else {
-           throw new Error(`智谱 AI 分析失败: ${JSON.stringify(zhipuData.error)}`);
+           throw new Error(`DeepSeek 分析失败: ${JSON.stringify(deepseekData.error)}`);
         }
 
       } catch (error) {
@@ -285,4 +278,3 @@
 
 </body>
 </html>
-
