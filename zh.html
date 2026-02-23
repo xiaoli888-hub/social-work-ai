@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>社工全能办公助手 (DeepSeek增强版)</title>
+  <title>社工全能办公助手 </title>
   <style>
     :root {
       --primary-color: #07c160;
@@ -77,9 +77,9 @@
     
     <label style="margin-top: 0;">🏢 1. 选择当前工作场景 (决定排版格式):</label>
     <select id="scenarioSelect">
-      <option value="resident">1️⃣ 社工访谈居民 (个案面谈)</option>
-      <option value="meeting">2️⃣ 整理会议纪要 (工作会议)</option>
-      <option value="supervision">3️⃣ 社工集体督导 (专业督导)</option>
+      <option value="resident">1️⃣ 访谈居民 (个案面谈)</option>
+      <option value="meeting">2️⃣ 会议纪要 (工作会议)</option>
+      <option value="supervision">3️⃣ 集体督导 (专业督导)</option>
     </select>
 
     <label>🗣️ 2. 引导模型识别语言:</label>
@@ -88,7 +88,7 @@
       <option value="yue">纯正粤语 (广东话)</option> 
     </select>
 
-    <label>📧 3. 默认接收报告的邮箱 (用于一键发送):</label>
+    <label>📧 3. 默认接收报告的邮箱:</label>
     <input type="email" id="targetEmail" placeholder="例如: your-email@qq.com">
   </div>
   
@@ -368,9 +368,30 @@
 
         transcriptArea.value = text;
         
+        // 如果清洗完之后什么都没剩下
         if (!text) { 
             statusDiv.innerHTML = "⚠️ 只录到了环境噪音或空白，未识别到有效语音，已自动过滤。"; 
+            
+            // 恢复按钮状态，允许重新录音
+            startBtn.style.display = 'flex'; 
+            startBtn.innerHTML = "▶️ 开始录音";
+            startBtn.style.backgroundColor = "var(--primary-color)";
+            pauseBtn.style.display = 'none'; 
+            stopBtn.style.display = 'none';
             return; 
+        }
+
+        // 【核心新增：防超短文本脑补拦截网】
+        if (text.length < 50) {
+            statusDiv.innerHTML = "⚠️ 录音内容过短（不足50个字），无法生成具有参考价值的报告，请提供更详细的陈述。";
+            
+            // 恢复按钮状态，允许重新录音
+            startBtn.style.display = 'flex'; 
+            startBtn.innerHTML = "▶️ 重新开始录音";
+            startBtn.style.backgroundColor = "var(--primary-color)";
+            pauseBtn.style.display = 'none'; 
+            stopBtn.style.display = 'none';
+            return;
         }
 
         statusDiv.innerHTML = "⏳ [2/2] 语音完毕！正在由 DeepSeek 按指定场景生成报告...";
@@ -454,4 +475,5 @@
 
 </body>
 </html>
+
 
