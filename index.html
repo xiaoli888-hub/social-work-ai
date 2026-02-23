@@ -216,12 +216,13 @@
 2. 如果原文中完全没有提及某个模块的内容，请务必直接在该模块下方单独填写“原文未提及”。
 3. 如果原文极短（例如只有几句寒暄）或缺乏督导实质内容，请直接在第一模块说明情况，其余模块必须全部填写“原文未提及”。`,
 
-      workorder: `你是一个专业的双百社工助手。请将用户提供的社工口述录音或随手记下的凌乱记录，提炼并整理成正式、规范的“12345市民热线咨询工单”回复报告。
+      workorder: `workorder: `你是鸿福社区专业的双百社工助手。请将用户提供的社工口述录音或随手记下的凌乱记录，提炼并整理成正式、规范的“12345市民热线咨询工单”回复报告。
 请严格按照以下排版格式输出（直接输出排版好的纯文本）：
 
 【跟进基本信息】
-（提取并整合：跟进时间、跟进方式。如未提及具体信息，请留空待人工补充）
-跟进了解时间就是录音文件上传大模型的时间，举例：2月23号 18:00 这个录音文件上传的大模型进行的分析，跟进时间就写2月23号 18:00。
+跟进人：鸿福社区双百社工
+跟进时间：（请严格填写本次系统分析的时间，见下方补充指令）
+跟进方式：（根据录音推断，如电访或入户走访，未提及则留空）
 
 【居民基本情况与核心诉求】
 （提取咨询人称呼及在12345工单中反映的具体问题、咨询事项或核心诉求）
@@ -230,13 +231,13 @@
 （详细分点列出社工做了哪些具体工作，例如：耐心倾听与安抚、政策解读、现场查看、部门协调、协助查询等）
 
 【居民反馈与态度】
-（描述居民对社工解释和处理的最终反馈，如表示感谢、已知晓、满意或提出进一步诉求）
+（描述居民对社工解释和处理的最终反馈，如表示感谢、已知晓、满意、理解或提出进一步诉求）
 
 核心铁律（最高优先级）：
-1. 绝对忠于录音原文！只能基于原文表达的客观处理过程整理。严禁虚构、严禁脑补、严禁根据经验自行编造处理过程！
+1. 绝对忠于录音原文！只能基于原文表达的客观处理过程整理。严禁虚构、严禁根据经验自行编造处理过程！
 2. 语言必须高度精炼、官方、专业，符合政府及社区12345工单回复的严谨规范要求。
 3. 如果原文中没有提及某个模块的内容，请务必直接在该模块下方填写“原文未提及”。
-4. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）。`
+4. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）。``
     };
 
     // ========== 3. 录音与核心引擎 (含防息屏、暂停/继续功能) ==========
@@ -369,11 +370,29 @@
       }
     };
 
-    async function processAudioAndText(audioBlob) {
+  async function processAudioAndText(audioBlob) {
       const groqKey = document.getElementById('groqApiKey').value.trim();
       const deepseekKey = document.getElementById('deepseekApiKey').value.trim();
       const currentScenario = scenarioSelect.value;
-      const systemPrompt = prompts[currentScenario];
+      
+      // 注意：这里将 const 改成了 let，以便后续我们可以动态往里面加东西
+      let systemPrompt = prompts[currentScenario]; 
+      
+      // 【核心新增：动态获取手机真实本地时间】
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const date = now.getDate();
+      const hours = now.getHours();
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? '下午' : '上午';
+      // 将24小时制转换为12小时制展示 (例如 17:00 变成 下午 5:00)
+      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+      const timeString = `${now.getFullYear()}年${month}月${date}日 ${ampm}${displayHours}:${minutes}`;
+
+      // 如果当前是 12345 工单场景，把时间作为强指令硬塞给大模型
+      if (currentScenario === 'workorder') {
+          systemPrompt += `\n\n【系统强制补充指令】：本次录音上传分析的系统确切时间为“${timeString}”。请你直接将这个精确时间填入【跟进基本信息】的“跟进时间”处。`;
+      }
       
       try {
         statusDiv.innerHTML = "⏳ [1/2] 正在发送至 Groq 识别语音...";
@@ -514,5 +533,6 @@
 
 </body>
 </html>
+
 
 
