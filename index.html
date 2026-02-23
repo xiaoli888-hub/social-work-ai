@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>社工全能办公助手 (终极增强版)</title>
+  <title>社工全能办公助手</title>
   <style>
     :root {
       --primary-color: #07c160;
@@ -77,10 +77,10 @@
     
     <label style="margin-top: 0;">🏢 1. 选择当前工作场景 (四大场景支持):</label>
     <select id="scenarioSelect">
-      <option value="resident">1️⃣ 社工访谈居民 (个案面谈)</option>
-      <option value="meeting">2️⃣ 整理会议纪要 (工作会议)</option>
-      <option value="supervision">3️⃣ 社工集体督导 (专业督导)</option>
-      <option value="workorder">4️⃣ 12345工单回复 (市民咨询)</option> 
+      <option value="resident">1️⃣ 首次访谈居民 </option>
+      <option value="meeting">2️⃣ 整理会议纪要</option>
+      <option value="supervision">3️⃣ 集体督导</option>
+      <option value="workorder">4️⃣ 工单回复 </option> 
     </select>
 
     <label>🗣️ 2. 引导模型识别语言:</label>
@@ -89,7 +89,7 @@
       <option value="yue">纯正粤语 (广东话)</option> 
     </select>
 
-    <label>📧 3. 默认接收报告的邮箱 (用于一键发送):</label>
+    <label>📧 3. 默认接收报告的邮箱 :</label>
     <input type="email" id="targetEmail" placeholder="例如: your-email@qq.com">
   </div>
   
@@ -158,17 +158,9 @@
 请严格按照以下排版格式输出（直接输出排版好的纯文本）：
 
 【家庭情况】
-
-
 【身体状况】
-
-
 【经济状况】
-
-
 【其他情况】
-
-
 核心铁律（最高优先级）：
 1. 绝对忠于录音原文！只能基于用户提供的原文进行归纳。严禁虚构、严禁脑补、严禁根据经验自行扩写原文中没有的任何细节！
 2. 如果原文中没有提及某个模块的内容，请务必直接在该模块下方填写“原文未提及”。
@@ -217,10 +209,11 @@
 3. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）。
 4. 如果原文极短（例如只有几句寒暄）或缺乏督导实质内容，请直接在第一模块说明情况，其余模块必须全部填写“原文未提及”。`,
 
-      workorder: `你是一个专业的双百社工助手。请将用户提供的社工口述录音或随手记下的凌乱记录，提炼并整理成正式、规范的“12345市民热线咨询工单”回复报告。
+      workorder: `你是鸿福社区的一个专业的双百社工助手。请将用户提供的社工口述录音或随手记下的凌乱记录，提炼并整理成正式、规范的“12345市民热线咨询工单”回复报告。
 请严格按照以下排版格式输出（直接输出排版好的纯文本）：
 
 【跟进基本信息】
+跟进人：鸿福社区双百社工
 跟进时间：（请严格填写本次系统分析的时间，见下方补充指令）
 跟进方式：（根据录音推断，如电访或入户走访，未提及则留空）
 
@@ -237,7 +230,8 @@
 1. 绝对忠于录音原文！只能基于原文表达的客观处理过程整理。严禁虚构、严禁脑补、严禁根据经验自行编造处理过程！
 2. 语言必须高度精炼、官方、专业，符合政府及社区12345工单回复的严谨规范要求。
 3. 如果原文中没有提及某个模块的内容，请务必直接在该模块下方填写“原文未提及”。
-4. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）。`
+4. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）
+5. 跟进人：鸿福社区双百社工。`
     };
 
     // ========== 3. 录音与核心引擎 (含防息屏、暂停/继续功能) ==========
@@ -435,8 +429,8 @@
             return; 
         }
 
-        if (text.length < 15) {
-            statusDiv.innerHTML = "⚠️ 录音内容过短（不足15个字），无法生成具有参考价值的报告，请提供更详细的口述。";
+        if (text.length < 30) {
+            statusDiv.innerHTML = "⚠️ 录音内容过短（不足30个字），无法生成具有参考价值的报告，请提供更详细的口述。";
             resetStartButton("▶️ 重新开始录音");
             return;
         }
@@ -532,3 +526,4 @@
 
 </body>
 </html>
+
