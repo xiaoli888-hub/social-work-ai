@@ -10,6 +10,8 @@
       --primary-hover: #06ad56;
       --danger-color: #fa5151;
       --danger-hover: #e04848;
+      --warning-color: #faad14;
+      --warning-hover: #d48806;
       --bg-color: #f4f5f7;
       --card-bg: #ffffff;
       --text-main: #333333;
@@ -33,14 +35,18 @@
     
     button { font-family: inherit; cursor: pointer; border: none; transition: 0.2s; outline: none;}
     
-    /* 主操作按钮 */
-    .btn-main { padding: 16px 20px; font-size: 16px; font-weight: bold; border-radius: 10px; width: 100%; color: white; display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);}
+    /* 主操作按钮阵列 (优化为并排Flex布局) */
+    .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+    .btn-main { padding: 16px 10px; font-size: 15px; font-weight: bold; border-radius: 10px; flex: 1; color: white; display: flex; justify-content: center; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);}
+    
     .btn-start { background-color: var(--primary-color); }
     .btn-start:active { background-color: var(--primary-hover); transform: scale(0.98); }
-    .btn-stop { background-color: var(--danger-color); display: none; animation: pulse-shadow 1.5s infinite;}
-    .btn-stop:active { background-color: var(--danger-hover); transform: scale(0.98); }
     
-    @keyframes pulse-shadow { 0% { box-shadow: 0 0 0 0 rgba(250, 81, 81, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(250, 81, 81, 0); } 100% { box-shadow: 0 0 0 0 rgba(250, 81, 81, 0); } }
+    .btn-pause { background-color: var(--warning-color); display: none; }
+    .btn-pause:active { background-color: var(--warning-hover); transform: scale(0.98); }
+    
+    .btn-stop { background-color: var(--danger-color); display: none; }
+    .btn-stop:active { background-color: var(--danger-hover); transform: scale(0.98); }
 
     #status { text-align: center; margin: 15px 0 5px; font-size: 13px; color: var(--text-muted); font-weight: bold; min-height: 20px;}
     #timer { font-size: 16px; color: var(--danger-color); font-weight: bold; margin-left: 5px; font-family: monospace;}
@@ -101,12 +107,15 @@
   </div>
 
   <div class="card">
-    <button id="startBtn" class="btn-main btn-start">▶️ 开始录音</button>
-    <button id="stopBtn" class="btn-main btn-stop">⏹️ 结束录音并生成专业报告</button>
+    <div class="btn-group">
+      <button id="startBtn" class="btn-main btn-start">▶️ 开始录音</button>
+      <button id="pauseBtn" class="btn-main btn-pause">⏸️ 暂停录音</button>
+      <button id="stopBtn" class="btn-main btn-stop">⏹️ 生成报告</button>
+    </div>
     
     <div id="status">准备就绪...</div>
     
-    <label>📝 语音精准转写结果 (支持方言):</label>
+    <label>📝 语音精准转写结果 (自动过滤垃圾噪音):</label>
     <textarea id="transcript" rows="5" placeholder="录音结束后，原始语音对应的文字会出现在这里..."></textarea>
   </div>
 
@@ -207,16 +216,15 @@
 4. 只基于陈述或对话的事实分类归纳整理，没有提及的部分拒绝幻觉，不做任何陈述`
     };
 
-    // ========== 3. 录音与核心引擎 (新增屏幕常亮防息屏功能) ==========
+    // ========== 3. 录音与核心引擎 (含防息屏、暂停/继续功能) ==========
     let mediaRecorder;
     let audioChunks = [];
     let recordingTimer;
     let secondsRecorded = 0;
-    
-    // 【核心新增】用于保存屏幕常亮锁定的变量
     let wakeLock = null; 
 
     const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
     const stopBtn = document.getElementById('stopBtn');
     const statusDiv = document.getElementById('status');
     const transcriptArea = document.getElementById('transcript');
@@ -231,31 +239,49 @@
       return `${m}:${s}`;
     }
 
-    // 【核心新增】请求屏幕常亮的方法
     async function requestWakeLock() {
       try {
         if ('wakeLock' in navigator) {
           wakeLock = await navigator.wakeLock.request('screen');
-          console.log('屏幕常亮已开启');
         }
       } catch (err) {
         console.error(`屏幕常亮申请失败: ${err.message}`);
       }
     }
 
-    // 【核心新增】释放屏幕常亮的方法
     function releaseWakeLock() {
       if (wakeLock !== null) {
-        wakeLock.release()
-          .then(() => { wakeLock = null; console.log('屏幕常亮已解除'); });
+        wakeLock.release().then(() => { wakeLock = null; });
       }
     }
 
+    // 独立出计时器更新UI的逻辑
+    function startTimerUI() {
+      recordingTimer = setInterval(() => {
+        secondsRecorded++;
+        const timerEl = document.getElementById('timer');
+        if (timerEl) timerEl.innerText = formatTime(secondsRecorded);
+      }, 1000);
+    }
+
+    // 【核心交互：开始/继续录音】
     startBtn.onclick = async () => {
       const deepseekKey = document.getElementById('deepseekApiKey').value.trim();
       const groqKey = document.getElementById('groqApiKey').value.trim();
-      if (!deepseekKey || !groqKey) { alert("请先在下方填写好相关的 API Key！"); return; }
+      if (!deepseekKey || !groqKey) { alert("请先在上方填写好相关的 API Key！"); return; }
 
+      // 场景 A：从“暂停”状态恢复为“继续”
+      if (mediaRecorder && mediaRecorder.state === 'paused') {
+        mediaRecorder.resume();
+        startTimerUI();
+        
+        startBtn.style.display = 'none';
+        pauseBtn.style.display = 'flex';
+        statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">${formatTime(secondsRecorded)}</span>`;
+        return;
+      }
+
+      // 场景 B：全新开始录音
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
@@ -271,30 +297,53 @@
         };
 
         mediaRecorder.start(1000); 
-        
-        // 【核心新增】开始录音的同时，申请屏幕常亮！
         await requestWakeLock();
 
-        startBtn.style.display = 'none'; stopBtn.style.display = 'flex';
+        // 界面变更为：隐藏开始，显示暂停和停止
+        startBtn.style.display = 'none'; 
+        pauseBtn.style.display = 'flex';
+        stopBtn.style.display = 'flex';
+        
         transcriptArea.value = ''; reportCard.style.display = 'none';
         secondsRecorded = 0;
         statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">00:00</span>`;
-        recordingTimer = setInterval(() => {
-          secondsRecorded++;
-          document.getElementById('timer').innerText = formatTime(secondsRecorded);
-        }, 1000);
+        startTimerUI();
       } catch (err) { alert("麦克风启动失败，请检查浏览器权限！\n" + err.message); }
     };
 
+    // 【核心交互：暂停录音】
+    pauseBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.pause();
+        clearInterval(recordingTimer);
+        
+        // 界面变更为：隐藏暂停，把开始按钮变成“继续”，保持停止
+        pauseBtn.style.display = 'none';
+        startBtn.style.display = 'flex';
+        startBtn.innerHTML = "▶️ 继续录音";
+        startBtn.style.backgroundColor = "#52c41a"; // 醒目的继续绿
+        
+        statusDiv.innerHTML = `⏸️ 录音已暂停 <span id="timer" style="color:var(--warning-color);">${formatTime(secondsRecorded)}</span>`;
+      }
+    };
+
+    // 【核心交互：结束并生成】
     stopBtn.onclick = () => {
       clearInterval(recordingTimer);
-      startBtn.style.display = 'flex'; stopBtn.style.display = 'none';
-      statusDiv.innerHTML = "⏳ 正在打包音频...";
       
-      // 【核心新增】结束录音，释放屏幕常亮许可
+      // 重置按钮外观
+      startBtn.style.display = 'flex'; 
+      startBtn.innerHTML = "▶️ 开始录音";
+      startBtn.style.backgroundColor = "var(--primary-color)";
+      pauseBtn.style.display = 'none'; 
+      stopBtn.style.display = 'none';
+      
+      statusDiv.innerHTML = "⏳ 正在打包音频...";
       releaseWakeLock();
       
-      mediaRecorder.stop(); 
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop(); 
+      }
     };
 
     async function processAudioAndText(audioBlob) {
@@ -314,9 +363,34 @@
         const groqData = await groqRes.json();
         if (!groqRes.ok) throw new Error(`语音识别失败: ${groqData.error?.message || '未知错误'}`);
         
-        const text = groqData.text.trim();
+        let text = groqData.text.trim();
+        
+        // 【核心保留】：AI 幻觉广告词清洗过滤器
+        const hallucinations = [
+          "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
+          "请不吝点赞，订阅，转发，打赏支持明镜与点点栏目",
+          "请不吝点赞、订阅、转发、打赏支持明镜与点点栏目",
+          "明镜与点点栏目",
+          "明镜与点点",
+          "请不吝点赞",
+          "谢谢观看",
+          "感谢观看",
+          "本期视频",
+          "字幕提供"
+        ];
+        
+        hallucinations.forEach(phrase => {
+          const regex = new RegExp(phrase, "gi");
+          text = text.replace(regex, "");
+        });
+        text = text.replace(/^[，。、！？\s]+|[，。、！？\s]+$/g, "").trim();
+
         transcriptArea.value = text;
-        if (!text) { statusDiv.innerHTML = "⚠️ 未识别到有效语音。"; return; }
+        
+        if (!text) { 
+            statusDiv.innerHTML = "⚠️ 只录到了环境噪音或空白，未识别到有效语音，已自动过滤。"; 
+            return; 
+        }
 
         statusDiv.innerHTML = "⏳ [2/2] 语音完毕！正在由 DeepSeek 按指定场景生成报告...";
         reportCard.style.display = 'block';
@@ -340,7 +414,7 @@
         if (dsRes.ok) {
            let aiReply = dsData.choices[0].message.content.trim();
            resultDiv.innerText = aiReply;
-           statusDiv.innerHTML = "✅ <span style='color: #07c160;'>处理完毕！请选择下方操作：复制 / 导出 Word / 邮件发送。</span>";
+           statusDiv.innerHTML = "✅ <span style='color: var(--primary-color);'>处理完毕！请选择下方操作：复制 / 导出 Word / 邮件发送。</span>";
            document.getElementById('wordCount').innerText = "共计 " + aiReply.replace(/\s+/g, '').length + " 字";
         } else { throw new Error(`排版失败: ${JSON.stringify(dsData.error)}`); }
       } catch (error) { statusDiv.innerHTML = `<span style="color:red;">❌ 处理失败: ${error.message}</span>`; }
@@ -355,7 +429,7 @@
         const btn = document.getElementById('copyBtn');
         const origHTML = btn.innerHTML; 
         btn.innerHTML = "<span>✅</span><span>已复制</span>";
-        btn.style.color = "#07c160";
+        btn.style.color = "var(--primary-color)";
         setTimeout(() => { btn.innerHTML = origHTML; btn.style.color = "#555"; }, 2000);
       }).catch(err => alert("复制失败"));
     };
