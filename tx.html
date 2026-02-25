@@ -62,11 +62,14 @@
     .btn-copy { background-color: #f0f2f5; border-color: #d9d9d9; color: #555; }
     .btn-word { background-color: #e6f7ff; border-color: #91d5ff; color: #0066cc; }
     .btn-email { background-color: #fff0f6; border-color: #ffadd2; color: #eb2f96; }
+    
+    /* 添加调试日志展示区 */
+    #debugLog { margin-top: 15px; font-size: 12px; color: #d93025; background: #fce8e6; padding: 10px; border-radius: 5px; display: none; word-wrap: break-word;}
   </style>
 </head>
 <body>
 
-  <div class="header-title">🎤 AI 社工全能助手</div>
+  <div class="header-title">🎤 AI 社工全能助手 (带详细调试)</div>
 
   <div class="card">
     <div class="section-title">⚙️ 核心设置</div>
@@ -119,8 +122,9 @@
     </div>
     
     <div id="status">准备就绪...</div>
+    <div id="debugLog"></div>
     
-    <label>📝 语音精准转写结果 (自动过滤垃圾噪音与极短文本):</label>
+    <label>📝 语音精准转写结果:</label>
     <textarea id="transcript" rows="5" placeholder="录音结束后，原始语音对应的文字会出现在这里..."></textarea>
   </div>
 
@@ -240,21 +244,29 @@
 5. 跟进人：鸿福社区双百社工。`
     };
 
-    // ========== 3. 原生浏览器签名生成器 (替代外部加密库) ==========
+    // ========== 3. 原生浏览器签名生成器 ==========
     async function generateTencentSignature(signStr, secretKey) {
-        const enc = new TextEncoder();
-        const keyData = enc.encode(secretKey);
-        const cryptoKey = await crypto.subtle.importKey(
-            "raw", keyData, { name: "HMAC", hash: { name: "SHA-1" } }, false, ["sign"]
-        );
-        const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(signStr));
-        const hashArray = Array.from(new Uint8Array(signatureBuffer));
-        const base64Str = btoa(String.fromCharCode.apply(null, hashArray));
-        return base64Str;
+        try {
+            console.log("[DEBUG] 开始生成加密签名，源文本:", signStr);
+            const enc = new TextEncoder();
+            const keyData = enc.encode(secretKey);
+            const cryptoKey = await crypto.subtle.importKey(
+                "raw", keyData, { name: "HMAC", hash: { name: "SHA-1" } }, false, ["sign"]
+            );
+            const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(signStr));
+            const hashArray = Array.from(new Uint8Array(signatureBuffer));
+            const base64Str = btoa(String.fromCharCode.apply(null, hashArray));
+            console.log("[DEBUG] 签名生成成功:", base64Str);
+            return base64Str;
+        } catch (e) {
+            console.error("[DEBUG] 签名生成失败:", e);
+            throw new Error("加密签名生成失败，请检查浏览器是否支持 Web Crypto API。");
+        }
     }
 
-    // ========== 4. 音频转换引擎 (用于适配腾讯云) ==========
+    // ========== 4. 音频转换引擎 ==========
     async function blobToWav(blob) {
+      console.log("[DEBUG] 开始转换音频为 WAV 格式，原文件大小:", blob.size);
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const arrayBuffer = await blob.arrayBuffer();
       const audioBuffer = await new Promise((resolve, reject) => {
@@ -268,9 +280,7 @@
       const view = new DataView(buffer);
 
       function writeString(view, offset, string) {
-        for (let i = 0; i < string.length; i++) {
-          view.setUint8(offset + i, string.charCodeAt(i));
-        }
+        for (let i = 0; i < string.length; i++) { view.setUint8(offset + i, string.charCodeAt(i)); }
       }
 
       let offset = 0;
@@ -300,7 +310,9 @@
           offset += 2;
         }
       }
-      return new Blob([view], { type: 'audio/wav' });
+      const wavBlob = new Blob([view], { type: 'audio/wav' });
+      console.log("[DEBUG] WAV 格式转换完毕，最终大小:", wavBlob.size);
+      return wavBlob;
     }
 
     // ========== 5. 录音与核心引擎 ==========
@@ -314,6 +326,7 @@
     const pauseBtn = document.getElementById('pauseBtn');
     const stopBtn = document.getElementById('stopBtn');
     const statusDiv = document.getElementById('status');
+    const debugLog = document.getElementById('debugLog');
     const transcriptArea = document.getElementById('transcript');
     const reportCard = document.getElementById('reportCard');
     const resultDiv = document.getElementById('result');
@@ -325,27 +338,13 @@
       return `${m}:${s}`;
     }
 
-    async function requestWakeLock() {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLock = await navigator.wakeLock.request('screen');
-        }
-      } catch (err) { console.error(`屏幕常亮申请失败: ${err.message}`); }
-    }
-
-    function releaseWakeLock() {
-      if (wakeLock !== null) { wakeLock.release().then(() => { wakeLock = null; }); }
-    }
-
-    function startTimerUI() {
-      recordingTimer = setInterval(() => {
-        secondsRecorded++;
-        const timerEl = document.getElementById('timer');
-        if (timerEl) timerEl.innerText = formatTime(secondsRecorded);
-      }, 1000);
+    function showErrorLog(msg) {
+        debugLog.style.display = 'block';
+        debugLog.innerHTML = `<strong>技术明细日志:</strong><br>${msg}`;
     }
 
     startBtn.onclick = async () => {
+      debugLog.style.display = 'none';
       const deepseekKey = document.getElementById('deepseekApiKey').value.trim();
       const appId = document.getElementById('tencentAppId').value.trim();
       const secretId = document.getElementById('tencentSecretId').value.trim();
@@ -358,7 +357,11 @@
 
       if (mediaRecorder && mediaRecorder.state === 'paused') {
         mediaRecorder.resume();
-        startTimerUI();
+        recordingTimer = setInterval(() => {
+          secondsRecorded++;
+          const timerEl = document.getElementById('timer');
+          if (timerEl) timerEl.innerText = formatTime(secondsRecorded);
+        }, 1000);
         startBtn.style.display = 'none';
         pauseBtn.style.display = 'flex';
         statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">${formatTime(secondsRecorded)}</span>`;
@@ -380,7 +383,6 @@
         };
 
         mediaRecorder.start(1000); 
-        await requestWakeLock();
 
         startBtn.style.display = 'none'; 
         pauseBtn.style.display = 'flex';
@@ -389,7 +391,11 @@
         transcriptArea.value = ''; reportCard.style.display = 'none';
         secondsRecorded = 0;
         statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">00:00</span>`;
-        startTimerUI();
+        recordingTimer = setInterval(() => {
+          secondsRecorded++;
+          const timerEl = document.getElementById('timer');
+          if (timerEl) timerEl.innerText = formatTime(secondsRecorded);
+        }, 1000);
       } catch (err) { alert("麦克风启动失败，请检查浏览器权限！\n" + err.message); }
     };
 
@@ -414,7 +420,6 @@
       stopBtn.style.display = 'none';
       
       statusDiv.innerHTML = "⏳ 正在打包音频...";
-      releaseWakeLock();
       
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop(); 
@@ -431,29 +436,23 @@
       let systemPrompt = prompts[currentScenario];
       
       const now = new Date();
-      const month = now.getMonth() + 1;
-      const date = now.getDate();
-      const hours = now.getHours();
-      const minutes = now.getMinutes().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? '下午' : '上午';
-      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
-      const timeString = `${now.getFullYear()}年${month}月${date}日 ${ampm}${displayHours}:${minutes}`;
+      const timeString = `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日 ${now.getHours() >= 12 ? '下午' : '上午'}${now.getHours() > 12 ? now.getHours() - 12 : (now.getHours() === 0 ? 12 : now.getHours())}:${now.getMinutes().toString().padStart(2, '0')}`;
 
       if (currentScenario === 'workorder') {
           systemPrompt += `\n\n【系统强制补充指令】：本次录音上传分析的系统确切时间为“${timeString}”。请你直接将这个精确时间填入【跟进基本信息】的“跟进时间”处。`;
       }
       
       try {
+        console.log("[DEBUG] 开始核心处理流程...");
         statusDiv.innerHTML = "⏳ [1/3] 正在转换音频格式适配腾讯云...";
         const wavBlob = await blobToWav(audioBlob);
 
         statusDiv.innerHTML = "⏳ [2/3] 正在发送至腾讯云(16k_zh_large)识别语音...";
         
-        // 生成腾讯云极速版鉴权参数 (使用原生浏览器 API 计算)
         const timestamp = Math.floor(Date.now() / 1000);
         const params = {
             appid: appId,
-            engine_type: "16k_zh_large", // 强制使用普方英大模型
+            engine_type: "16k_zh_large", 
             format: 1,
             secretid: secretId,
             timestamp: timestamp,
@@ -471,18 +470,28 @@
         const path = "/api/v1/flash/recognize";
         const signStr = "POST" + host + path + "?" + queryStr;
 
-        // 【更新点】：使用原生加密函数
+        console.log("[DEBUG] 准备进行 Fetch 请求...");
         const signature = await generateTencentSignature(signStr, secretKey);
         const uploadUrl = "https://" + host + path + "?" + queryStr + "&sign=" + encodeURIComponent(signature);
+        console.log("[DEBUG] 腾讯云请求完整 URL:", uploadUrl);
 
-        const tencentRes = await fetch(uploadUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/octet-stream" },
-            body: wavBlob
-        });
+        let tencentRes;
+        try {
+            tencentRes = await fetch(uploadUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/octet-stream" },
+                body: wavBlob
+            });
+            console.log("[DEBUG] 腾讯云响应状态码:", tencentRes.status);
+        } catch (fetchError) {
+            console.error("[DEBUG] 网络Fetch抛出致命异常:", fetchError);
+            throw new Error(`网络请求失败。通常是因为浏览器跨域限制(CORS)拦截了对腾讯云的直接访问。\n底层报错: ${fetchError.message}`);
+        }
 
         const tencentData = await tencentRes.json();
-        if (tencentData.code !== 0) throw new Error(`腾讯云识别失败: ${tencentData.message || '未知错误'}`);
+        console.log("[DEBUG] 腾讯云返回的完整数据:", tencentData);
+
+        if (tencentData.code !== 0) throw new Error(`腾讯云API返回失败: ${tencentData.message} (Code: ${tencentData.code})`);
         
         let text = "";
         if (tencentData.flash_result && tencentData.flash_result.length > 0) {
@@ -509,6 +518,7 @@
         text = text.replace(/^[，。、！？\s]+|[，。、！？\s]+$/g, "").trim();
 
         transcriptArea.value = text;
+        console.log("[DEBUG] 提取的文本结果:", text);
         
         if (!text) { 
             statusDiv.innerHTML = "⚠️ 只录到了环境噪音或空白，未识别到有效语音，已自动过滤。"; 
@@ -527,6 +537,7 @@
         document.getElementById('reportTitle').innerText = `📑 ${scenarioSelect.options[scenarioSelect.selectedIndex].text.split(' ')[1]}报告`;
         resultDiv.innerText = "深入分析与排版中...";
 
+        console.log("[DEBUG] 开始请求 DeepSeek...");
         const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
@@ -546,8 +557,15 @@
            resultDiv.innerText = aiReply;
            statusDiv.innerHTML = "✅ <span style='color: var(--primary-color);'>处理完毕！请选择下方操作：复制 / 导出 Word / 邮件发送。</span>";
            document.getElementById('wordCount').innerText = "共计 " + aiReply.replace(/\s+/g, '').length + " 字";
-        } else { throw new Error(`排版失败: ${JSON.stringify(dsData.error)}`); }
-      } catch (error) { statusDiv.innerHTML = `<span style="color:red;">❌ 处理失败: ${error.message}</span>`; resetStartButton(); }
+           console.log("[DEBUG] 流程完全结束！");
+        } else { throw new Error(`DeepSeek排版失败: ${JSON.stringify(dsData.error)}`); }
+
+      } catch (error) { 
+        console.error("[DEBUG] 全局捕获到错误:", error);
+        statusDiv.innerHTML = `<span style="color:red;">❌ 处理失败</span>`; 
+        showErrorLog(error.message);
+        resetStartButton(); 
+      }
     }
 
     function resetStartButton(textStr = "▶️ 开始录音") {
@@ -559,7 +577,6 @@
     }
 
     // ========== 6. 三大工具箱功能 ==========
-    
     document.getElementById('copyBtn').onclick = () => {
       const text = resultDiv.innerText;
       if (!text) return;
@@ -575,19 +592,12 @@
     document.getElementById('exportWordBtn').onclick = () => {
       const text = resultDiv.innerText;
       if (!text || text === "深入分析与排版中...") return;
-      
       const formattedText = text.replace(/\n/g, '<br>');
       const titleName = scenarioSelect.options[scenarioSelect.selectedIndex].text.split(' ')[1];
-      const wordHTML = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head><meta charset='utf-8'><title>${titleName}</title>
-        <style>body { font-family: 'SimSun', '宋体', 'Microsoft YaHei', sans-serif; font-size: 14pt; line-height: 1.6; } h2 { text-align: center; color: #333; }</style></head>
-        <body><h2>${titleName}</h2><div>${formattedText}</div></body></html>`;
-
+      const wordHTML = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>${titleName}</title><style>body { font-family: 'SimSun', '宋体', 'Microsoft YaHei', sans-serif; font-size: 14pt; line-height: 1.6; } h2 { text-align: center; color: #333; }</style></head><body><h2>${titleName}</h2><div>${formattedText}</div></body></html>`;
       const blob = new Blob(['\ufeff', wordHTML], { type: 'application/msword' });
       const url = URL.createObjectURL(blob);
       const filename = `${titleName}_${new Date().getTime()}.doc`;
-      
       const a = document.createElement("a");
       a.href = url; a.download = filename;
       document.body.appendChild(a); a.click();
@@ -597,14 +607,11 @@
     document.getElementById('sendEmailBtn').onclick = () => {
       const text = resultDiv.innerText;
       const targetEmail = document.getElementById('targetEmail').value.trim();
-      
       if (!text || text === "深入分析与排版中...") { alert("报告还没生成完呢！"); return; }
       if (!targetEmail) { alert("请在上方设置里填写【默认接收报告的邮箱】！"); return; }
-      
       const scenarioName = scenarioSelect.options[scenarioSelect.selectedIndex].text.split(' ')[1];
       const mailSubject = encodeURIComponent(`【AI整理呈报】${scenarioName} - ${new Date().toLocaleDateString()}`);
       const mailBody = encodeURIComponent("这是由 AI 辅助生成的报告内容：\n\n" + text);
-      
       window.location.href = `mailto:${targetEmail}?subject=${mailSubject}&body=${mailBody}`;
     };
   </script>
