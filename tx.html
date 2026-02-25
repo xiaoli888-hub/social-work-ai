@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>社工全能办公助手</title>
-  <script src="https://cdn.bootcdn.net/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
   <style>
     :root {
       --primary-color: #07c160;
@@ -159,7 +158,7 @@
       }
     });
 
-    // ========== 2. 四套专家级提示词库 (加入极严厉的反幻觉铁律) ==========
+    // ========== 2. 四套专家级提示词库 ==========
     const prompts = {
       resident: `你是一个专业的社工助手。请将用户提供的原始口语化访谈记录，提炼并整理成正式的社工文书报告。
 请严格按照以下排版格式输出（直接输出排版好的纯文本）：
@@ -241,7 +240,20 @@
 5. 跟进人：鸿福社区双百社工。`
     };
 
-    // ========== 3. 音频转换引擎 (用于适配腾讯云) ==========
+    // ========== 3. 原生浏览器签名生成器 (替代外部加密库) ==========
+    async function generateTencentSignature(signStr, secretKey) {
+        const enc = new TextEncoder();
+        const keyData = enc.encode(secretKey);
+        const cryptoKey = await crypto.subtle.importKey(
+            "raw", keyData, { name: "HMAC", hash: { name: "SHA-1" } }, false, ["sign"]
+        );
+        const signatureBuffer = await crypto.subtle.sign("HMAC", cryptoKey, enc.encode(signStr));
+        const hashArray = Array.from(new Uint8Array(signatureBuffer));
+        const base64Str = btoa(String.fromCharCode.apply(null, hashArray));
+        return base64Str;
+    }
+
+    // ========== 4. 音频转换引擎 (用于适配腾讯云) ==========
     async function blobToWav(blob) {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
       const arrayBuffer = await blob.arrayBuffer();
@@ -291,7 +303,7 @@
       return new Blob([view], { type: 'audio/wav' });
     }
 
-    // ========== 4. 录音与核心引擎 ==========
+    // ========== 5. 录音与核心引擎 ==========
     let mediaRecorder;
     let audioChunks = [];
     let recordingTimer;
@@ -437,7 +449,7 @@
 
         statusDiv.innerHTML = "⏳ [2/3] 正在发送至腾讯云(16k_zh_large)识别语音...";
         
-        // 生成腾讯云极速版鉴权参数
+        // 生成腾讯云极速版鉴权参数 (使用原生浏览器 API 计算)
         const timestamp = Math.floor(Date.now() / 1000);
         const params = {
             appid: appId,
@@ -459,8 +471,8 @@
         const path = "/api/v1/flash/recognize";
         const signStr = "POST" + host + path + "?" + queryStr;
 
-        const hash = CryptoJS.HmacSHA1(signStr, secretKey);
-        const signature = CryptoJS.enc.Base64.stringify(hash);
+        // 【更新点】：使用原生加密函数
+        const signature = await generateTencentSignature(signStr, secretKey);
         const uploadUrl = "https://" + host + path + "?" + queryStr + "&sign=" + encodeURIComponent(signature);
 
         const tencentRes = await fetch(uploadUrl, {
@@ -546,7 +558,7 @@
       stopBtn.style.display = 'none';
     }
 
-    // ========== 5. 三大工具箱功能 ==========
+    // ========== 6. 三大工具箱功能 ==========
     
     document.getElementById('copyBtn').onclick = () => {
       const text = resultDiv.innerText;
@@ -598,5 +610,4 @@
   </script>
 
 </body>
-
 </html>
