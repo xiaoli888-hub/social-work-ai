@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>社工全能办公助手</title>
+  <style>
+    :root {
+      --primary-color: #07c160;
+      --primary-hover: #06ad56;
+      --danger-color: #fa5151;
+      --danger-hover: #e04848;
+      --warning-color: #faad14;
+      --warning-hover: #d48806;
+      --bg-color: #f4f5f7;
+      --card-bg: #ffffff;
+      --text-main: #333333;
+      --text-muted: #888888;
+      --border-color: #e0e0e0;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; padding: 15px; max-width: 600px; margin: 0 auto; background-color: var(--bg-color); color: var(--text-main); line-height: 1.5;}
+    
+    .header-title { text-align: center; color: var(--text-main); font-size: 22px; font-weight: bold; margin-bottom: 20px;}
+    
+    .card { background: var(--card-bg); padding: 20px; border-radius: 12px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .section-title { font-size: 15px; font-weight: bold; color: var(--primary-color); border-bottom: 2px solid #e6f7ec; padding-bottom: 8px; margin-bottom: 16px; display: flex; align-items: center; gap: 6px;}
+    
+    label { font-size: 13px; font-weight: bold; display: block; margin-top: 12px; margin-bottom: 6px; color: #555;}
+    input, textarea, select { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; background-color: #fafafa; transition: 0.3s;}
+    input:focus, textarea:focus, select:focus { border-color: var(--primary-color); outline: none; background-color: #fff; box-shadow: 0 0 0 2px rgba(7,193,96,0.1);}
+    
+    /* 两列网格布局，用于压缩输入框空间 */
+    .grid-2-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    
+    button { font-family: inherit; cursor: pointer; border: none; transition: 0.2s; outline: none;}
+    
+    /* 主操作按钮阵列 (优化为并排Flex布局) */
+    .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+    .btn-main { padding: 16px 10px; font-size: 15px; font-weight: bold; border-radius: 10px; flex: 1; color: white; display: flex; justify-content: center; align-items: center; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.05);}
+    
+    .btn-start { background-color: var(--primary-color); }
+    .btn-start:active { background-color: var(--primary-hover); transform: scale(0.98); }
+    
+    .btn-pause { background-color: var(--warning-color); display: none; }
+    .btn-pause:active { background-color: var(--warning-hover); transform: scale(0.98); }
+    
+    .btn-stop { background-color: var(--danger-color); display: none; }
+    .btn-stop:active { background-color: var(--danger-hover); transform: scale(0.98); }
+
+    #status { text-align: center; margin: 15px 0 5px; font-size: 13px; color: var(--text-muted); font-weight: bold; min-height: 20px;}
+    #timer { font-size: 16px; color: var(--danger-color); font-weight: bold; margin-left: 5px; font-family: monospace;}
+    
+    /* 报告展示区 */
+    #reportCard { display: none; }
+    #result { margin-top: 10px; white-space: pre-wrap; font-size: 15px; line-height: 1.7; color: #222; background: #f8fbff; padding: 15px; border-radius: 8px; border: 1px solid #e6f0fa;}
+    
+    /* 底部工具栏排版优化 (移动端完美适配的网格) */
+    .report-footer { margin-top: 20px; }
+    .word-count { color: #999; font-size: 13px; margin-bottom: 10px; display: block; text-align: right;}
+    .action-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    
+    .btn-tool { padding: 12px 0; font-size: 13px; font-weight: bold; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1px solid transparent;}
+    .btn-tool:hover, .btn-tool:active { filter: brightness(0.95); transform: translateY(1px);}
+    
+    .btn-copy { background-color: #f0f2f5; border-color: #d9d9d9; color: #555; }
+    .btn-word { background-color: #e6f7ff; border-color: #91d5ff; color: #0066cc; }
+    .btn-email { background-color: #fff0f6; border-color: #ffadd2; color: #eb2f96; }
+  </style>
+</head>
+<body>
+
+  <div class="header-title">🎤 AI 社工全能助手</div>
+
+  <div class="card">
+    <div class="section-title">⚙️ 核心设置</div>
+    
+    <label style="margin-top: 0;">🏢 1. 选择当前工作场景 (四大场景支持):</label>
+    <select id="scenarioSelect">
+      <option value="resident">1️⃣ 首次访谈居民 </option>
+      <option value="meeting">2️⃣ 整理会议纪要</option>
+      <option value="supervision">3️⃣ 集体督导</option>
+      <option value="workorder">4️⃣ 工单回复 </option> 
+    </select>
+
+    <label>🗣️ 2. 引导模型识别语言:</label>
+    <select id="langSelect">
+      <option value="zh">普通话及其他方言 (中文)</option>
+      <option value="yue">纯正粤语 (广东话)</option> 
+    </select>
+
+    <label>📧 3. 默认接收报告的邮箱 :</label>
+    <input type="email" id="targetEmail" placeholder="例如: your-email@qq.com">
+  </div>
+  
+  <div class="card">
+    <div class="section-title">🔑 密钥配置 (本地安全存储)</div>
+    <div class="grid-2-cols">
+      <div>
+        <label style="margin-top:0;">DeepSeek Key:</label>
+        <input type="password" id="deepseekApiKey" placeholder="sk-...">
+      </div>
+      <div>
+        <label style="margin-top:0;">Groq Key:</label>
+        <input type="password" id="groqApiKey" placeholder="gsk_...">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="btn-group">
+      <button id="startBtn" class="btn-main btn-start">▶️ 开始录音</button>
+      <button id="pauseBtn" class="btn-main btn-pause">⏸️ 暂停录音</button>
+      <button id="stopBtn" class="btn-main btn-stop">⏹️ 生成报告</button>
+    </div>
+    
+    <div id="status">准备就绪...</div>
+    
+    <label>📝 语音精准转写结果 (自动过滤垃圾噪音与极短文本):</label>
+    <textarea id="transcript" rows="5" placeholder="录音结束后，原始语音对应的文字会出现在这里..."></textarea>
+  </div>
+
+  <div class="card" id="reportCard">
+    <h3 style="margin-top: 0; text-align: center; color: var(--primary-color);" id="reportTitle">📑 智能整理报告</h3>
+    <div id="result"></div>
+    
+    <div class="report-footer">
+      <span class="word-count" id="wordCount">0 字</span>
+      <div class="action-grid">
+        <button class="btn-tool btn-copy" id="copyBtn">
+          <span>📋</span>
+          <span>复制全文</span>
+        </button>
+        <button class="btn-tool btn-word" id="exportWordBtn">
+          <span>⬇️</span>
+          <span>导出 Word</span>
+        </button>
+        <button class="btn-tool btn-email" id="sendEmailBtn">
+          <span>✉️</span>
+          <span>邮件发送</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ========== 1. 本地存储初始化 ==========
+    const elements = ['deepseekApiKey', 'groqApiKey', 'targetEmail'];
+    elements.forEach(id => {
+      const el = document.getElementById(id);
+      el.value = localStorage.getItem(id) || '';
+      el.addEventListener('input', function() { localStorage.setItem(id, this.value); });
+    });
+
+    // ========== 2. 四套专家级提示词库 (加入极严厉的反幻觉铁律) ==========
+    const prompts = {
+      resident: `你是一个专业的社工助手。请将用户提供的原始口语化访谈记录，提炼并整理成正式的社工文书报告。
+请严格按照以下排版格式输出（直接输出排版好的纯文本）：
+
+【家庭情况】
+【身体状况】
+【经济状况】
+【其他情况】
+核心铁律（最高优先级）：
+1. 绝对忠于录音原文！只能基于用户提供的原文进行归纳。严禁虚构、严禁脑补、严禁根据经验自行扩写原文中没有的任何细节！
+2. 如果原文中没有提及某个模块的内容，请务必直接在该模块下方填写“原文未提及”。
+3. 不要使用任何 Markdown 语法标记（比如不要用 ** 加粗）。
+4. 如果原文极短或无实质信息，请如实提炼，填入【其他情况】中，其余模块全部填“原文未提及”。`,
+
+      meeting: `你是一个专业的行政助手。请将用户提供的口语化或凌乱的会议发言记录，提炼并整理成结构清晰、正式严谨的会议纪要。
+请严格按照以下排版格式输出（直接输出排版好的纯文本）：
+
+【会议背景与议题】
+（提炼本次会议的主要目的、核心讨论的议题。如果没有明确说明，请根据内容推断或留空）
+
+【核心讨论内容】
+（归纳会议中各方表达的主要观点、反映的问题、提供的数据或现状。分条理客观陈述）
+
+【会议决议】
+（明确会议最终达成的共识、做出的决定。如果未形成决议，请注明“暂无明确决议”）
+
+【下一步行动计划】
+（列出会议安排的后续跟进事项、责任人或时间节点。如果没有，请注明“无明确后续跟进事项”）
+
+核心铁律（最高优先级）：
+1. 绝对忠于录音原文！只能基于原文表达的观点整理。严禁虚构、严禁脑补、严禁根据经验自行扩写原文中没有的任何细节！
+2. 如果原文中没有提及某个模块的内容，请务必直接在该模块下方填写“原文未提及”或“暂无明确决议”。
+3. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）。
+4. 如果提供的文本只包含几句无意义的闲聊，请直接输出“录音内容缺乏实质性会议内容，无法生成纪要。”`,
+
+      supervision: `你是一个专业的社会工作督导助手。请将用户提供的口语化督导交流过程，提炼并整理成专业、规范的社工集体督导记录。
+请严格按照以下排版格式输出（直接输出排版好的纯文本）：
+【日期及时间】
+（请严格填写本次系统分析的时间，见下方补充指令。格式为：YYYY年MM月DD日 HH:MM-HH:MM）
+【总时长】
+  4H
+【主题】
+（提炼本次督导会议的主要目的、核心讨论的议题。如果没有明确说明，请根据内容推断或留空）
+【督导方式】
+（请根据录音推断，如：线下集体督导、线下个人督导、入户走访督导等。若未提及，填写“未提及”）
+【督导内容要点】
+【请忠于原文，分段归纳会议中汇报的个案情况、社工遇到的困难、业务进展或行政管理问题。可使用数字序号如“1. 2. 3.”进行纯文本排版】
+【督导者回应/建议】
+（请忠于原文，提取督导者给出的具体指导意见、情绪疏导、专业视角分析或资源建议。可使用数字序号进行纯文本排版）
+【社工反馈及跟进计划】
+（请忠于原文，提取社工在会议中的反馈，以及会议中明确指出的下一步跟进计划或具体行动）
+【下次讨论】
+（请提取会议中约定的下次督导主题、时间或跟进事项，若无则填写“未提及”）
+核心铁律（最高优先级）：
+1. 绝对忠于录音原文！这是真实的社工记录，严禁虚构、严禁脑补、严禁根据经验自行扩写任何原文中没有的细节！
+2. 如果原文中完全没有提及某个模块的内容，请务必直接在该模块下方单独填写“未提及”。
+3. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）。
+4. 如果原文极短（例如只有几句寒暄）或缺乏督导实质内容，请直接在第一模块说明情况，其余模块必须全部填写“未提及”。`,
+
+      workorder: `你是鸿福社区的一个专业的双百社工助手。请将用户提供的社工口述录音或随手记下的凌乱记录，提炼并整理成正式、规范的“12345市民热线咨询工单”回复报告。
+请严格按照以下排版格式输出（直接输出排版好的纯文本）：
+
+【跟进基本信息】
+跟进人：鸿福社区双百社工
+跟进时间：（请严格填写本次系统分析的时间，见下方补充指令）
+跟进方式：（根据录音推断，如电访或入户走访，未提及则留空）
+
+【居民基本情况与核心诉求】
+（提取咨询人称呼及在12345工单中反映的具体问题、咨询事项或核心诉求）
+
+【处理过程与社工行动】
+（详细分点列出社工做了哪些具体工作，例如：耐心倾听与安抚、政策解读、现场查看、部门协调、协助查询等）
+
+【居民反馈与态度】
+（描述居民对社工解释和处理的最终反馈，如表示感谢、已知晓、满意或提出进一步诉求）
+
+核心铁律（最高优先级）：
+1. 绝对忠于录音原文！只能基于原文表达的客观处理过程整理。严禁虚构、严禁脑补、严禁根据经验自行编造处理过程！
+2. 语言必须高度精炼、官方、专业，符合政府及社区12345工单回复的严谨规范要求。
+3. 如果原文中没有提及某个模块的内容，请务必直接在该模块下方填写“原文未提及”。
+4. 不要使用任何 Markdown 语法标记（绝对禁止使用 ** 加粗）
+5. 跟进人：鸿福社区双百社工。`
+    };
+
+    // ========== 3. 录音与核心引擎 (含防息屏、暂停/继续功能) ==========
+    let mediaRecorder;
+    let audioChunks = [];
+    let recordingTimer;
+    let secondsRecorded = 0;
+    let wakeLock = null; 
+
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusDiv = document.getElementById('status');
+    const transcriptArea = document.getElementById('transcript');
+    const reportCard = document.getElementById('reportCard');
+    const resultDiv = document.getElementById('result');
+    const scenarioSelect = document.getElementById('scenarioSelect');
+    const langSelect = document.getElementById('langSelect');
+    
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+      const s = (seconds % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen');
+        }
+      } catch (err) {
+        console.error(`屏幕常亮申请失败: ${err.message}`);
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock !== null) {
+        wakeLock.release().then(() => { wakeLock = null; });
+      }
+    }
+
+    // 独立出计时器更新UI的逻辑
+    function startTimerUI() {
+      recordingTimer = setInterval(() => {
+        secondsRecorded++;
+        const timerEl = document.getElementById('timer');
+        if (timerEl) timerEl.innerText = formatTime(secondsRecorded);
+      }, 1000);
+    }
+
+    // 【核心交互：开始/继续录音】
+    startBtn.onclick = async () => {
+      const deepseekKey = document.getElementById('deepseekApiKey').value.trim();
+      const groqKey = document.getElementById('groqApiKey').value.trim();
+      if (!deepseekKey || !groqKey) { alert("请先在上方填写好相关的 API Key！"); return; }
+
+      // 场景 A：从“暂停”状态恢复为“继续”
+      if (mediaRecorder && mediaRecorder.state === 'paused') {
+        mediaRecorder.resume();
+        startTimerUI();
+        
+        startBtn.style.display = 'none';
+        pauseBtn.style.display = 'flex';
+        statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">${formatTime(secondsRecorded)}</span>`;
+        return;
+      }
+
+      // 场景 B：全新开始录音
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          if (audioChunks.length === 0) { statusDiv.innerHTML = "❌ 录音失败，没有捕捉到声音。"; return; }
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          await processAudioAndText(audioBlob);
+        };
+
+        mediaRecorder.start(1000); 
+        await requestWakeLock();
+
+        // 界面变更为：隐藏开始，显示暂停和停止
+        startBtn.style.display = 'none'; 
+        pauseBtn.style.display = 'flex';
+        stopBtn.style.display = 'flex';
+        
+        transcriptArea.value = ''; reportCard.style.display = 'none';
+        secondsRecorded = 0;
+        statusDiv.innerHTML = `🔴 正在录音中 <span id="timer">00:00</span>`;
+        startTimerUI();
+      } catch (err) { alert("麦克风启动失败，请检查浏览器权限！\n" + err.message); }
+    };
+
+    // 【核心交互：暂停录音】
+    pauseBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.pause();
+        clearInterval(recordingTimer);
+        
+        // 界面变更为：隐藏暂停，把开始按钮变成“继续”，保持停止
+        pauseBtn.style.display = 'none';
+        startBtn.style.display = 'flex';
+        startBtn.innerHTML = "▶️ 继续录音";
+        startBtn.style.backgroundColor = "#52c41a"; // 醒目的继续绿
+        
+        statusDiv.innerHTML = `⏸️ 录音已暂停 <span id="timer" style="color:var(--warning-color);">${formatTime(secondsRecorded)}</span>`;
+      }
+    };
+
+    // 【核心交互：结束并生成】
+    stopBtn.onclick = () => {
+      clearInterval(recordingTimer);
+      
+      // 重置按钮外观
+      startBtn.style.display = 'flex'; 
+      startBtn.innerHTML = "▶️ 开始录音";
+      startBtn.style.backgroundColor = "var(--primary-color)";
+      pauseBtn.style.display = 'none'; 
+      stopBtn.style.display = 'none';
+      
+      statusDiv.innerHTML = "⏳ 正在打包音频...";
+      releaseWakeLock();
+      
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop(); 
+      }
+    };
+
+    async function processAudioAndText(audioBlob) {
+      const groqKey = document.getElementById('groqApiKey').value.trim();
+      const deepseekKey = document.getElementById('deepseekApiKey').value.trim();
+      const currentScenario = scenarioSelect.value;
+      
+      // 注意：这里使用 let，以便动态拼接时间指令
+      let systemPrompt = prompts[currentScenario];
+      
+      // 【核心新增：动态获取手机真实本地时间】
+      const now = new Date();
+      const month = now.getMonth() + 1;
+      const date = now.getDate();
+      const hours = now.getHours();
+      const minutes = now.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? '下午' : '上午';
+      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+      const timeString = `${now.getFullYear()}年${month}月${date}日 ${ampm}${displayHours}:${minutes}`;
+
+      // 如果当前是 12345 工单场景，把时间作为强指令硬塞给大模型
+      if (currentScenario === 'workorder') {
+          systemPrompt += `\n\n【系统强制补充指令】：本次录音上传分析的系统确切时间为“${timeString}”。请你直接将这个精确时间填入【跟进基本信息】的“跟进时间”处。`;
+      }
+      
+      try {
+        statusDiv.innerHTML = "⏳ [1/2] 正在发送至 Groq 识别语音...";
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'recording.webm'); 
+        formData.append('model', 'whisper-large-v3');
+        formData.append('language', langSelect.value); 
+
+        const groqRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', { method: 'POST', headers: { 'Authorization': `Bearer ${groqKey}` }, body: formData });
+        const groqData = await groqRes.json();
+        if (!groqRes.ok) throw new Error(`语音识别失败: ${groqData.error?.message || '未知错误'}`);
+        
+        let text = groqData.text.trim();
+        
+        // 【防线一：AI 幻觉广告词清洗过滤器】
+        const hallucinations = [
+          "请不吝点赞 订阅 转发 打赏支持明镜与点点栏目",
+          "请不吝点赞，订阅，转发，打赏支持明镜与点点栏目",
+          "请不吝点赞、订阅、转发、打赏支持明镜与点点栏目",
+          "明镜与点点栏目",
+          "明镜与点点",
+          "请不吝点赞",
+          "谢谢观看",
+          "感谢观看",
+          "本期视频",
+          "字幕提供"
+        ];
+        
+        hallucinations.forEach(phrase => {
+          const regex = new RegExp(phrase, "gi");
+          text = text.replace(regex, "");
+        });
+        text = text.replace(/^[，。、！？\s]+|[，。、！？\s]+$/g, "").trim();
+
+        transcriptArea.value = text;
+        
+        // 【防线二：极短无用文本直接拦截网】
+        if (!text) { 
+            statusDiv.innerHTML = "⚠️ 只录到了环境噪音或空白，未识别到有效语音，已自动过滤。"; 
+            resetStartButton();
+            return; 
+        }
+
+        if (text.length < 30) {
+            statusDiv.innerHTML = "⚠️ 录音内容过短（不足30个字），无法生成具有参考价值的报告，请提供更详细的口述。";
+            resetStartButton("▶️ 重新开始录音");
+            return;
+        }
+
+        // 继续提交给 DeepSeek
+        statusDiv.innerHTML = "⏳ [2/2] 语音完毕！正在由 DeepSeek 按指定场景生成报告...";
+        reportCard.style.display = 'block';
+        document.getElementById('reportTitle').innerText = `📑 ${scenarioSelect.options[scenarioSelect.selectedIndex].text.split(' ')[1]}报告`;
+        resultDiv.innerText = "深入分析与排版中...";
+
+        const dsRes = await fetch('https://api.deepseek.com/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${deepseekKey}` },
+          body: JSON.stringify({
+            model: "deepseek-chat",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: text }
+            ],
+            temperature: 0.1
+          })
+        });
+
+        const dsData = await dsRes.json();
+        if (dsRes.ok) {
+           let aiReply = dsData.choices[0].message.content.trim();
+           resultDiv.innerText = aiReply;
+           statusDiv.innerHTML = "✅ <span style='color: var(--primary-color);'>处理完毕！请选择下方操作：复制 / 导出 Word / 邮件发送。</span>";
+           document.getElementById('wordCount').innerText = "共计 " + aiReply.replace(/\s+/g, '').length + " 字";
+        } else { throw new Error(`排版失败: ${JSON.stringify(dsData.error)}`); }
+      } catch (error) { statusDiv.innerHTML = `<span style="color:red;">❌ 处理失败: ${error.message}</span>`; resetStartButton(); }
+    }
+
+    // 重置按钮的小辅助函数
+    function resetStartButton(textStr = "▶️ 开始录音") {
+      startBtn.style.display = 'flex'; 
+      startBtn.innerHTML = textStr;
+      startBtn.style.backgroundColor = "var(--primary-color)";
+      pauseBtn.style.display = 'none'; 
+      stopBtn.style.display = 'none';
+    }
+
+    // ========== 4. 三大工具箱功能 ==========
+    
+    document.getElementById('copyBtn').onclick = () => {
+      const text = resultDiv.innerText;
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.getElementById('copyBtn');
+        const origHTML = btn.innerHTML; 
+        btn.innerHTML = "<span>✅</span><span>已复制</span>";
+        btn.style.color = "var(--primary-color)";
+        setTimeout(() => { btn.innerHTML = origHTML; btn.style.color = "#555"; }, 2000);
+      }).catch(err => alert("复制失败"));
+    };
+
+    document.getElementById('exportWordBtn').onclick = () => {
+      const text = resultDiv.innerText;
+      if (!text || text === "深入分析与排版中...") return;
+      
+      const formattedText = text.replace(/\n/g, '<br>');
+      const titleName = scenarioSelect.options[scenarioSelect.selectedIndex].text.split(' ')[1];
+      const wordHTML = `
+        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+        <head><meta charset='utf-8'><title>${titleName}</title>
+        <style>body { font-family: 'SimSun', '宋体', 'Microsoft YaHei', sans-serif; font-size: 14pt; line-height: 1.6; } h2 { text-align: center; color: #333; }</style></head>
+        <body><h2>${titleName}</h2><div>${formattedText}</div></body></html>`;
+
+      const blob = new Blob(['\ufeff', wordHTML], { type: 'application/msword' });
+      const url = URL.createObjectURL(blob);
+      const filename = `${titleName}_${new Date().getTime()}.doc`;
+      
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    };
+
+    document.getElementById('sendEmailBtn').onclick = () => {
+      const text = resultDiv.innerText;
+      const targetEmail = document.getElementById('targetEmail').value.trim();
+      
+      if (!text || text === "深入分析与排版中...") { alert("报告还没生成完呢！"); return; }
+      if (!targetEmail) { alert("请在上方设置里填写【默认接收报告的邮箱】！"); return; }
+      
+      const scenarioName = scenarioSelect.options[scenarioSelect.selectedIndex].text.split(' ')[1];
+      const mailSubject = encodeURIComponent(`【AI整理呈报】${scenarioName} - ${new Date().toLocaleDateString()}`);
+      const mailBody = encodeURIComponent("这是由 AI 辅助生成的报告内容：\n\n" + text);
+      
+      window.location.href = `mailto:${targetEmail}?subject=${mailSubject}&body=${mailBody}`;
+    };
+  </script>
+
+</body>
+</html>
+
