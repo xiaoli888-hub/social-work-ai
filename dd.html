@@ -375,21 +375,17 @@
       // 注意：这里使用 let，以便动态拼接时间指令
       let systemPrompt = prompts[currentScenario];
       
-      // 【核心新增：动态获取手机真实本地时间】
+// 【核心新增：动态获取手机真实本地时间】
       const now = new Date();
+      const year = now.getFullYear();
       const month = now.getMonth() + 1;
       const date = now.getDate();
-      const hours = now.getHours();
+      const hours = now.getHours().toString().padStart(2, '0'); // 统一使用规范的24小时制
       const minutes = now.getMinutes().toString().padStart(2, '0');
-      const ampm = hours >= 12 ? '下午' : '上午';
-      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
-      const timeString = `${now.getFullYear()}年${month}月${date}日 ${ampm}${displayHours}:${minutes}`;
+      const timeString = `${year}年${month}月${date}日 ${hours}:${minutes}`;
 
-      // 如果当前是 12345 工单场景，把时间作为强指令硬塞给大模型
-      if (currentScenario === 'workorder') {
-          systemPrompt += `\n\n【系统强制补充指令】：本次录音上传分析的系统确切时间为“${timeString}”。请你直接将这个精确时间填入【跟进基本信息】的“跟进时间”处。`;
-      }
-      
+      // 【全局通用时间强制指令】直接追加到所有场景的系统提示词末尾
+      systemPrompt += `\n\n【系统强制补充指令】：本次工作记录录入系统的确切时间为“${timeString}”。在上方指定的排版格式中，任何需要填写“日期及时间”、“跟进时间”、“会议时间”或未明确时间要求但涉及当前时间节点的地方，请务必严格填入此精确时间（${timeString}），绝对禁止自行编造或幻觉生成任何虚拟时间！`;
       try {
         statusDiv.innerHTML = "⏳ [1/2] 正在发送至 Groq 识别语音...";
         const formData = new FormData();
@@ -529,4 +525,5 @@
 
 </body>
 </html>
+
 
